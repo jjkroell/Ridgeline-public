@@ -1,0 +1,14 @@
+{
+  "listenAddr": "0.0.0.0:8080",
+  "dbPath": "/data/ridgeline.db",
+  "webDir": "/app/web/build",
+  "mqtt": {
+    "broker": "tcp://mosquitto:1883",
+    "clientID": "ridgelined-prod",
+    "topics": [
+      "meshcore/+/+/packets",
+      "meshcore/+/+/status"
+    ]
+  },
+  "adminToken": "CHANGE-ME"
+}

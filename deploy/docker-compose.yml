@@ -1,0 +1,59 @@
+name: ridgeline
+
+# Ridgeline production stack: a MeshCore observer broker (mosquitto), the
+# Ridgeline daemon, and Caddy as the TLS-terminating reverse proxy.
+#
+# setup.sh generates deploy/config.json, deploy/.env and deploy/Caddyfile from
+# your install answers. By default Caddy obtains real HTTPS certificates for your
+# domain automatically (ports 80/443). If you instead front Ridgeline with a
+# Cloudflare Tunnel or another proxy, tell setup.sh and it will bind Caddy to
+# localhost only.
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: ridgeline-mosquitto
+    restart: unless-stopped
+    ports:
+      # Observer nodes publish over MQTT-over-WebSockets on 9001. Remove this
+      # block if you point Ridgeline at an external broker instead of hosting one.
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  ridgelined:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ridgeline:latest
+    container_name: ridgeline-app
+    restart: unless-stopped
+    # Run as the host user that owns ./data so the bind-mounted DB dir is writable
+    # without a chown. setup.sh writes RIDGELINE_UID/GID into deploy/.env:
+    #   printf 'RIDGELINE_UID=%s\nRIDGELINE_GID=%s\n' "$(id -u)" "$(id -g)" > .env
+    user: "${RIDGELINE_UID:-1000}:${RIDGELINE_GID:-1000}"
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./config.json:/config/config.json:ro
+      - ./data:/data # ridgeline.db lives here (bind mount)
+    # No host port: caddy reaches it over the compose network as ridgelined:8080.
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ridgeline-caddy
+    restart: unless-stopped
+    depends_on:
+      - ridgelined
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  mosquitto-data:
+  caddy-data:
+  caddy-config:

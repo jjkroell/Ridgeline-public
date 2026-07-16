@@ -1,0 +1,24 @@
+# Caddy reverse-proxy for Ridgeline.
+#
+# setup.sh rewrites the site address on the first line from your install answers:
+#   • A domain (e.g. mesh.example.com) -> Caddy obtains a real HTTPS certificate
+#     automatically and serves the site over TLS.
+#   • ":80" (the default below) -> plain HTTP, for local use or when you front
+#     Ridgeline with a Cloudflare Tunnel / external proxy that terminates TLS.
+#
+# Either way Caddy adds baseline security headers + compression and proxies
+# everything — including the /api/live WebSocket, which it upgrades automatically
+# — to the Ridgeline daemon.
+:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+		-Server
+	}
+
+	reverse_proxy ridgelined:8080
+}

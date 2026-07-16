@@ -1,0 +1,39 @@
+{
+	"name": "web",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@tailwindcss/vite": "^4.3.1",
+		"@types/crypto-js": "^4.2.2",
+		"@types/leaflet": "^1.9.21",
+		"@types/leaflet.markercluster": "^1.5.6",
+		"@types/qrcode": "^1.5.6",
+		"svelte": "^5.56.1",
+		"svelte-check": "^4.6.0",
+		"tailwindcss": "^4.3.1",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.16"
+	},
+	"dependencies": {
+		"@noble/ed25519": "^2.3.0",
+		"@noble/hashes": "^1.8.0",
+		"crypto-js": "^4.2.0",
+		"leaflet": "^1.9.4",
+		"leaflet.markercluster": "^1.5.3",
+		"maplibre-gl": "^5.24.0",
+		"qrcode": "^1.5.4"
+	}
+}

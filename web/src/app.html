@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#070a0e" />
+		<!-- PWA / installable mobile app (scope /m) -->
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="/icons/apple-touch-180.png" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="Ridgeline" />
+
+		<!-- Primary SEO. Per-page routes override title/description via <svelte:head>
+		     (see $lib/components/Seo.svelte); these are the crawl-time defaults for
+		     the SPA fallback and any page that doesn't set its own.
+		     setup.sh personalizes the site name and (optionally) the region/geo tags
+		     below from your install answers. -->
+		<title>Ridgeline — MeshCore Mesh Observatory</title>
+		<meta
+			name="description"
+			content="Ridgeline is a live observatory for a MeshCore LoRa mesh network. Track nodes, repeaters, coverage and packet activity in real time."
+		/>
+		<meta
+			name="keywords"
+			content="MeshCore, MeshCore mesh, LoRa mesh, mesh network, amateur radio, ham radio, off-grid communication, mesh observability, mesh map, node coverage, repeater map"
+		/>
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+		<meta name="author" content="Ridgeline" />
+		<!-- No canonical / og:url here on purpose: those are per-page and are set by
+		     $lib/components/Seo.svelte. A hardcoded canonical in this shared shell would
+		     wrongly point every route at "/" and conflict with the per-page tag. -->
+		<link rel="alternate" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+
+		<!-- Open Graph (Facebook, Discord, Slack, iMessage, etc.) -->
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Ridgeline" />
+		<meta property="og:title" content="Ridgeline — MeshCore Mesh Observatory" />
+		<meta
+			property="og:description"
+			content="Live map and analytics for a MeshCore LoRa mesh: nodes, repeaters, coverage and packets in real time."
+		/>
+		<meta property="og:image" content="/icons/icon-512.png" />
+
+		<!-- Twitter / X card -->
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="Ridgeline — MeshCore Mesh Observatory" />
+		<meta
+			name="twitter:description"
+			content="Live map and analytics for a MeshCore LoRa mesh — nodes, repeaters, coverage and packets in real time."
+		/>
+		<meta name="twitter:image" content="/icons/icon-512.png" />
+
+		<!-- Structured data: helps search engines understand what this observatory is. -->
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@graph": [
+					{
+						"@type": "WebSite",
+						"@id": "/#website",
+						"url": "/",
+						"name": "Ridgeline",
+						"description": "Live observability for a MeshCore LoRa mesh network.",
+						"inLanguage": "en"
+					},
+					{
+						"@type": "WebApplication",
+						"@id": "/#app",
+						"name": "Ridgeline",
+						"url": "/",
+						"applicationCategory": "Utilities",
+						"operatingSystem": "Web",
+						"browserRequirements": "Requires JavaScript.",
+						"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+						"description": "A real-time observatory for a MeshCore LoRa mesh network: node directory, live packet feed, coverage maps, and analytics.",
+						"about": {
+							"@type": "Thing",
+							"name": "MeshCore LoRa mesh network",
+							"description": "An off-grid, long-range LoRa radio mesh network."
+						}
+					}
+				]
+			}
+		</script>
+		<script>
+			// Apply the saved theme before first paint to avoid a flash.
+			try {
+				if (localStorage.getItem('ridgeline-theme') === 'light')
+					document.documentElement.classList.add('theme-light');
+			} catch (e) {}
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+		<!-- Crawlable summary for search engines and no-JavaScript clients. The live
+		     app above replaces the view once JavaScript runs; this content mirrors it
+		     honestly so non-JS crawlers still index what this site is. -->
+		<noscript>
+			<main style="max-width: 44rem; margin: 0 auto; padding: 2rem 1.25rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+				<h1>Ridgeline — MeshCore Mesh Observatory</h1>
+				<p>
+					Ridgeline is a live observatory for a
+					<strong>MeshCore</strong> LoRa mesh network. It maps every
+					node and repeater, streams a live packet feed, and charts coverage and
+					link health for the mesh.
+				</p>
+				<h2>Explore the network</h2>
+				<ul>
+					<li><a href="/about">About Ridgeline &amp; the MeshCore mesh</a></li>
+					<li><a href="/nodes">Node &amp; repeater directory</a></li>
+					<li><a href="/live">Live packet feed</a></li>
+					<li><a href="/map">Coverage map</a></li>
+					<li><a href="/live-map">Live signal map</a></li>
+					<li><a href="/analytics">Network analytics</a></li>
+					<li><a href="/channels">Channels</a></li>
+					<li><a href="/observers">Observer receivers</a></li>
+				</ul>
+				<p>
+					Ridgeline requires JavaScript for its interactive maps and live feed.
+					Please enable JavaScript for the full experience.
+				</p>
+			</main>
+		</noscript>
+	</body>
+</html>

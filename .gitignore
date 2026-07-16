@@ -1,0 +1,27 @@
+# Go
+/bin/
+*.exe
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Local data
+/data/
+
+# Env
+.env
+
+# Built daemon binary
+/ridgelined
+
+# Local dev/prod config (contain the admin token)
+/config.dev.json
+/config.prod.json
+
+# local session handoff — never commit
+handoff.md
+
+# Firmware download blobs (served statically, kept out of git)
+web/static/firmware/

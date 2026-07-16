@@ -1,0 +1,272 @@
+@import url('https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,300;0,400;0,500;0,700;0,900;1,400&family=Space+Mono:wght@400;700&display=swap');
+@import 'tailwindcss';
+
+/* ── Ridgeline design tokens ───────────────────────────────────────────────
+   A dark "topographic instrument": near-black blue-green ink, contour-line
+   textures, a luminous signal-teal accent, mono data readouts. */
+@theme {
+	--color-ink: #0e151b;
+	--color-ink-2: #121a21;
+	--color-panel: #161f28;
+	--color-panel-2: #1d2630;
+	--color-line: #283441;
+	--color-line-bright: #364655;
+
+	--color-fg: #dde7ed;
+	--color-fg-dim: #8394a1;
+	/* Lifted from #55626d for legibility — kept below fg-dim so it stays the
+	   lowest (faint) tier, just less washed out on the dark background. */
+	--color-fg-faint: #6c7884;
+
+	--color-signal: #34e3c4;
+	--color-signal-deep: #129e87;
+	--color-amber: #e8b454;
+	--color-coral: #ff6b6b;
+	--color-violet: #a78bfa;
+	--color-sky: #5b9dff;
+	--color-lime: #6ee7a8;
+
+	/* Node-role colors (consistent with the MeshCore ecosystem) */
+	--color-role-repeater: #ff6b6b;
+	--color-role-companion: #5b9dff;
+	--color-role-room: #6ee7a8;
+	--color-role-sensor: #f472b6;
+	--color-role-observer: #a78bfa;
+
+	--font-display: 'Chivo', ui-sans-serif, system-ui, sans-serif;
+	--font-sans: 'Chivo', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'Space Mono', ui-monospace, 'SF Mono', monospace;
+
+	--radius: 2px;
+
+	/* Atmosphere (dark defaults). Overridden by .theme-light below. */
+	--contour-color: rgba(94, 124, 140, 0.17);
+	--glow-a: rgba(52, 227, 196, 0.06);
+	--glow-b: rgba(232, 180, 84, 0.045);
+}
+
+/* ── Light theme: a "topographic paper" inverse — warm off-white ground,
+   ink text, brown contour lines, a deeper teal accent that reads on white. */
+html.theme-light {
+	--color-ink: #e1e5e0;
+	--color-ink-2: #d8ddd7;
+	--color-panel: #fbfcfa;
+	--color-panel-2: #eef2ef;
+	--color-line: #d4dbd6;
+	--color-line-bright: #b7c2bc;
+
+	--color-fg: #16242a;
+	--color-fg-dim: #4f5f66;
+	/* Darkened from #8a979c for legibility — kept above fg-dim so it stays the
+	   lowest (faint) tier, just less washed out on the light paper background. */
+	--color-fg-faint: #707e85;
+
+	--color-signal: #0f9e8a;
+	--color-signal-deep: #0c7a6c;
+	--color-amber: #b07d1e;
+	--color-coral: #d94a47;
+	--color-violet: #7c5cf0;
+	--color-sky: #2f6fe0;
+	--color-lime: #1f9e62;
+
+	--color-role-repeater: #d4302f;
+	--color-role-companion: #2563eb;
+	--color-role-room: #16a34a;
+	--color-role-sensor: #db2777;
+	--color-role-observer: #7c5cf0;
+
+	--contour-color: rgba(141, 110, 74, 0.28);
+	--glow-a: rgba(15, 158, 138, 0.07);
+	--glow-b: rgba(176, 125, 30, 0.06);
+}
+
+@layer base {
+	html {
+		color-scheme: dark;
+	}
+	html.theme-light {
+		color-scheme: light;
+	}
+	body {
+		background-color: var(--color-ink);
+		color: var(--color-fg);
+		font-family: var(--font-sans);
+		font-feature-settings: 'ss01', 'cv01';
+		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
+	}
+
+	/* Atmosphere, fixed behind everything: corner glows + topographic
+	   contour lines drawn through a mask so they pick up the theme color. */
+	body::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		z-index: -2;
+		background:
+			radial-gradient(120% 80% at 80% -10%, var(--glow-a), transparent 60%),
+			radial-gradient(100% 70% at 0% 110%, var(--glow-b), transparent 55%),
+			var(--color-ink);
+	}
+	body::after {
+		content: '';
+		position: fixed;
+		inset: 0;
+		z-index: -1;
+		pointer-events: none;
+		background-color: var(--contour-color);
+		-webkit-mask: url('/contours.svg') center / cover no-repeat;
+		mask: url('/contours.svg') center / cover no-repeat;
+	}
+
+	::selection {
+		background: var(--color-signal);
+		color: var(--color-ink);
+	}
+
+	::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		background: var(--color-line-bright);
+		border: 3px solid transparent;
+		background-clip: content-box;
+		border-radius: 999px;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: var(--color-signal-deep);
+		background-clip: content-box;
+	}
+}
+
+@layer components {
+	/* Eyebrow / instrument label */
+	.label {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		/* fg-dim (not fg-faint): the faint token is too low-contrast at this size
+		   in both themes; dim keeps the de-emphasized feel while staying readable. */
+		color: var(--color-fg-dim);
+	}
+
+	.panel {
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent),
+			var(--color-panel);
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius);
+	}
+
+	.panel-hover {
+		transition:
+			border-color 0.18s ease,
+			transform 0.18s ease,
+			background-color 0.18s ease;
+	}
+	.panel-hover:hover {
+		border-color: var(--color-line-bright);
+		background-color: var(--color-panel-2);
+	}
+
+	/* Luminous signal text + glow */
+	.glow-signal {
+		text-shadow: 0 0 14px rgba(52, 227, 196, 0.45);
+	}
+
+	/* Animated live dot */
+	.live-dot {
+		position: relative;
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--color-signal);
+		box-shadow: 0 0 10px var(--color-signal);
+	}
+	.live-dot::after {
+		content: '';
+		position: absolute;
+		inset: -4px;
+		border-radius: 999px;
+		border: 1px solid var(--color-signal);
+		animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+	}
+	@keyframes ping {
+		0% {
+			transform: scale(0.6);
+			opacity: 0.8;
+		}
+		100% {
+			transform: scale(2.4);
+			opacity: 0;
+		}
+	}
+
+	/* Staggered entrance used on page load */
+	.rise {
+		opacity: 0;
+		transform: translateY(8px);
+		animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+	@keyframes rise {
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.tnum {
+		font-variant-numeric: tabular-nums;
+	}
+}
+
+/* MapLibre navigation control, themed to match the panels. Shared by every map
+   view (/map, /live-map, node inset) so it lives here rather than per-page. */
+.maplibregl-ctrl-group {
+	background: var(--color-panel);
+	border: 1px solid var(--color-line);
+}
+.maplibregl-ctrl-group button + button {
+	border-top: 1px solid var(--color-line);
+}
+
+/* ── Site-wide hover tooltips ───────────────────────────────────────────────
+   The maps render node hover labels as Leaflet .leaflet-tooltip elements. Style
+   them here (not per-map) to match the Tooltip.svelte bubble used everywhere
+   else — ink-2 surface, bright hairline border, dimmed label, app radius — so a
+   node hover reads the same on the maps as in the rest of the UI. Tooltip.svelte
+   is the component equivalent; keep the two visually in sync. */
+/* Scoped under .leaflet-container so these win over Leaflet's own defaults, which
+   are injected at runtime (after app.css) and would otherwise take equal-specificity
+   priority. */
+.leaflet-container .leaflet-tooltip {
+	background: var(--color-ink-2);
+	border: 1px solid var(--color-line-bright);
+	color: var(--color-fg-dim);
+	border-radius: var(--radius);
+	padding: 6px 10px;
+	font-size: 0.75rem;
+	line-height: 1.375;
+	font-weight: 500;
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+	white-space: nowrap;
+}
+/* Pointer matches the bubble surface (we anchor node tooltips above the dot). */
+.leaflet-container .leaflet-tooltip-top::before {
+	border-top-color: var(--color-ink-2);
+}
+.leaflet-container .leaflet-tooltip-bottom::before {
+	border-bottom-color: var(--color-ink-2);
+}
+.leaflet-container .leaflet-tooltip-left::before {
+	border-left-color: var(--color-ink-2);
+}
+.leaflet-container .leaflet-tooltip-right::before {
+	border-right-color: var(--color-ink-2);
+}

@@ -1,0 +1,18 @@
+# Keep the build context small and reproducible.
+.git
+.github
+**/node_modules
+web/build
+web/.svelte-kit
+data
+*.db
+*.db-wal
+*.db-shm
+ridgelined
+config.dev.json
+config.prod.json
+deploy
+cmd/scrub
+cmd/whybridge
+web/static/firmware
+*.log

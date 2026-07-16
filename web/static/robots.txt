@@ -1,0 +1,12 @@
+# Ridgeline — MeshCore mesh observatory
+# Public content is open to all crawlers; account/admin/API areas are not useful
+# to index. setup.sh rewrites the Sitemap line below with your site URL.
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /identity
+Disallow: /login
+Disallow: /api/
+
+Sitemap: /sitemap.xml
