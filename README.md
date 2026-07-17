@@ -219,20 +219,46 @@ in which case registration auto-verifies), users can:
 
 ## Updating & re-running setup
 
-Change any answer by re-running the installer:
+To pull the latest code and rebuild, just run the updater:
 
 ```sh
-./setup.sh
+./update.sh              # stock stack (deploy/docker-compose.yml)
+./update.sh --external   # if you installed with docker-compose.external.yml
 ```
 
-To pull new code and rebuild:
+It fetches the newest version, rebuilds, restarts, and waits for the container to
+report healthy. **Your admin account, database (`deploy/data/`), Caddy certificates,
+and personalization all persist** — the updater never touches your gitignored config
+(`web/.env`, `deploy/config.json`, `deploy/.env`).
+
+Prefer to do it by hand? It's just:
 
 ```sh
 git pull
-cd deploy && docker compose up -d --build
+cd deploy && docker compose up -d --build   # add -f docker-compose.external.yml for the external stack
 ```
 
-Your database in `deploy/data/` and Caddy's certificates persist across rebuilds.
+### If `git pull` complains about local changes
+
+The installer personalizes a few tracked files in place (`web/src/lib/site-content.ts`,
+and `app.html`/`Caddyfile`/`sitemap.xml`/`robots.txt` if you set a custom name, URL, or
+domain). Most updates don't touch those, so a plain pull is clean — but if one does, git
+will refuse with *"local changes would be overwritten"*. `./update.sh` handles this
+automatically (it stashes, pulls, and reapplies). By hand:
+
+```sh
+git stash        # set your personalizations aside
+git pull
+git stash pop    # reapply them (resolve any conflict, keeping your values)
+```
+
+Or, simplest of all, **re-run `./setup.sh`** after pulling — it regenerates every
+personalized file from your answers, then rebuilds. Re-running the installer is also
+how you change any earlier answer (site name, region, broker, SMTP, About page…).
+
+> **Note on old configs:** if your `deploy/config.json` still has an `adminToken` line
+> from an earlier install, it's harmless — newer versions ignore it. Admin access is the
+> first registered account (see the ⚠️ owner note near the top of this README), not a token.
 
 ## Manual install
 
@@ -273,6 +299,7 @@ web/                SvelteKit single-page app (built static)
 deploy/             Docker Compose stack: mosquitto + ridgelined + caddy
 docs/CONFIG.md      full settings reference
 setup.sh            interactive installer
+update.sh           pull latest + rebuild/restart (keeps your config & data)
 ```
 
 ## Status & credits
