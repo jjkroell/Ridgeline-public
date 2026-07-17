@@ -1,0 +1,44 @@
+name: ridgeline
+
+# Minimal, "bring your own infrastructure" stack: JUST the Ridgeline daemon.
+#
+# Use this to run Ridgeline alongside an existing MeshCore setup — subscribe to a
+# broker you already run, and front it with your own reverse proxy / TLS. It drops
+# the bundled mosquitto and Caddy from docker-compose.yml and instead publishes
+# the app's port directly.
+#
+# Setup:
+#   1. cp config.example.json config.json   (still gitignored)
+#      - set mqtt.broker to your existing broker, e.g. "tcp://broker.example.com:1883"
+#      - set mqtt.username / mqtt.password if it's authenticated
+#      - set a strong adminToken
+#   2. printf 'RIDGELINE_UID=%s\nRIDGELINE_GID=%s\n' "$(id -u)" "$(id -g)" > .env
+#   3. docker compose -f docker-compose.external.yml up -d --build
+#   4. point your own proxy (nginx/Caddy/Traefik/Cloudflare Tunnel) at localhost:8080
+#
+# Multiple analyzers can share one broker — just give each a unique mqtt.clientID.
+services:
+  ridgelined:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${RIDGELINE_VERSION:-dev}
+    image: ridgeline:latest
+    container_name: ridgeline-app
+    restart: unless-stopped
+    user: "${RIDGELINE_UID:-1000}:${RIDGELINE_GID:-1000}"
+    ports:
+      # Publish the app directly (no bundled Caddy here). Put your own reverse
+      # proxy / TLS in front of this. Bind to loopback ("127.0.0.1:8080:8080") if
+      # your proxy runs on the same host and you don't want it exposed publicly.
+      - "8080:8080"
+    volumes:
+      - ./config.json:/config/config.json:ro
+      - ./data:/data # ridgeline.db lives here (bind mount)
+    healthcheck:
+      test: ["CMD", "/app/ridgelined", "-healthcheck", "-config", "/config/config.json"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,11 +29,15 @@ var version = "dev" // set via -ldflags at build time
 func main() {
 	configPath := flag.String("config", "config.json", "path to config file")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	healthcheck := flag.Bool("healthcheck", false, "probe the local /api/health endpoint and exit 0 if healthy (for container HEALTHCHECK)")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("ridgelined", version)
 		return
+	}
+	if *healthcheck {
+		os.Exit(healthProbe(*configPath))
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -40,6 +45,31 @@ func main() {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
+}
+
+// healthProbe hits the daemon's own /api/health and returns a process exit code
+// (0 = healthy, 1 = not). It's what the container HEALTHCHECK runs: the distroless
+// runtime image has no shell or curl, so the binary probes itself. The port comes
+// from the config's listenAddr (defaulting to 8080), dialed on loopback.
+func healthProbe(configPath string) int {
+	port := "8080"
+	if cfg, err := config.Load(configPath); err == nil && cfg.ListenAddr != "" {
+		if _, p, err := net.SplitHostPort(cfg.ListenAddr); err == nil && p != "" {
+			port = p
+		}
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/api/health")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "healthcheck:", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "healthcheck: unhealthy status", resp.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 func run(log *slog.Logger, configPath string) error {

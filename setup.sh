@@ -440,7 +440,11 @@ if caddy_addr and caddy_addr != ':80':
 PY
 
 # 7e. Deploy uid/gid so the bind-mounted DB dir is writable.
-printf 'RIDGELINE_UID=%s\nRIDGELINE_GID=%s\n' "$(id -u)" "$(id -g)" > deploy/.env
+# Stamp the build with the current git version (tag/sha) so the daemon logs
+# something more useful than "dev". Falls back to "dev" outside a git checkout.
+RL_VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+printf 'RIDGELINE_UID=%s\nRIDGELINE_GID=%s\nRIDGELINE_VERSION=%s\n' \
+	"$(id -u)" "$(id -g)" "$RL_VERSION" > deploy/.env
 say "  deploy/.env"
 mkdir -p deploy/data
 

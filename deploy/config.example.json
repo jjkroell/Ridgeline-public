@@ -5,6 +5,8 @@
   "mqtt": {
     "broker": "tcp://mosquitto:1883",
     "clientID": "ridgelined-prod",
+    "username": "",
+    "password": "",
     "topics": [
       "meshcore/+/+/packets",
       "meshcore/+/+/status"

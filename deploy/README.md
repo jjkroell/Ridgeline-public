@@ -34,6 +34,9 @@ If you'd rather configure by hand:
    # and (optionally) the email block for account verification.
    ```
 
+   For an **authenticated broker**, set `mqtt.username` / `mqtt.password` (they're
+   in the example as empty placeholders; leave them empty for an anonymous broker).
+
 2. **User ids** — so the bind-mounted database directory is writable:
 
    ```bash
@@ -56,6 +59,32 @@ If you'd rather configure by hand:
    docker compose up -d --build
    docker compose logs -f ridgelined   # watch packets land
    ```
+
+## Running alongside existing infrastructure (external broker / your own proxy)
+
+If you already run a MeshCore broker and a reverse proxy — e.g. you want several
+analyzers on one broker — skip the bundled mosquitto + Caddy and run **just the
+daemon** with `deploy/docker-compose.external.yml`:
+
+```bash
+cd deploy
+cp config.example.json config.json     # set mqtt.broker to your broker;
+                                       # set mqtt.username/password if it needs auth
+printf 'RIDGELINE_UID=%s\nRIDGELINE_GID=%s\n' "$(id -u)" "$(id -g)" > .env
+docker compose -f docker-compose.external.yml up -d --build
+```
+
+That variant **publishes the app on `:8080`** (the stock stack doesn't — Caddy
+fronts it internally), so point your own proxy/TLS at `localhost:8080`. Give each
+analyzer sharing a broker a unique `mqtt.clientID`.
+
+## Health & version
+
+The image ships a `HEALTHCHECK` (the daemon self-probes `/api/health`, since the
+distroless runtime has no shell/curl), so `docker ps` shows `(healthy)`. Stamp the
+build with a version by setting `RIDGELINE_VERSION` (e.g. a git tag) in `deploy/.env`
+before `--build`; otherwise it logs `version=dev`. Check the running version with
+`docker exec ridgeline-app /app/ridgelined -version`.
 
 ## What must never be committed
 

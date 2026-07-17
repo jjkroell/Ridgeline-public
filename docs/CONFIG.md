@@ -67,7 +67,7 @@ automatically shows a granular analytics opt-in and the policy lists it.
     "broker": "tcp://mosquitto:1883",      // bundled broker, or tcp://your-host:1883
     "clientID": "ridgelined",
     "topics": ["meshcore/+/+/packets", "meshcore/+/+/status"],
-    "username": "...", "password": "..."   // omit for an anonymous broker
+    "username": "", "password": ""         // set for an authenticated broker; empty = anonymous
   },
   "adminToken": "a-long-random-secret",     // protects /admin
   "email": {                                 // optional; omit to disable email

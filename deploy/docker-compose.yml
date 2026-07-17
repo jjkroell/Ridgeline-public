@@ -25,6 +25,10 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        # Stamp the running binary; set RIDGELINE_VERSION (e.g. a git tag) in
+        # deploy/.env, else it logs version=dev.
+        VERSION: ${RIDGELINE_VERSION:-dev}
     image: ridgeline:latest
     container_name: ridgeline-app
     restart: unless-stopped
@@ -38,6 +42,13 @@ services:
       - ./config.json:/config/config.json:ro
       - ./data:/data # ridgeline.db lives here (bind mount)
     # No host port: caddy reaches it over the compose network as ridgelined:8080.
+    # Health surfaces in `docker ps` (the image self-probes /api/health).
+    healthcheck:
+      test: ["CMD", "/app/ridgelined", "-healthcheck", "-config", "/config/config.json"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
   caddy:
     image: caddy:2-alpine

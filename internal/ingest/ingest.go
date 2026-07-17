@@ -100,7 +100,15 @@ func (in *Ingestor) Start() error {
 
 	in.client = mqtt.NewClient(opts)
 	tok := in.client.Connect()
-	tok.Wait()
+	// With ConnectRetry + AutoReconnect, paho keeps (re)connecting in the
+	// background. Don't block the whole daemon — the HTTP server, /api/health and
+	// the web UI — on the broker being reachable at startup. Wait a short bounded
+	// time for a fast connect (so the common case still logs "subscribed" before
+	// serving), then proceed regardless; the connection completes/retries later.
+	if !tok.WaitTimeout(10 * time.Second) {
+		in.log.Warn("mqtt connect still pending; retrying in background", "broker", in.cfg.Broker)
+		return nil
+	}
 	return tok.Error()
 }
 

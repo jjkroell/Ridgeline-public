@@ -4,6 +4,8 @@
   "mqtt": {
     "broker": "tcp://localhost:1883",
     "clientID": "ridgelined",
+    "username": "",
+    "password": "",
     "topics": ["meshcore/+/+/packets", "meshcore/+/+/status"]
   },
   "adminToken": "set-a-long-random-secret-to-enable-the-admin-panel"
