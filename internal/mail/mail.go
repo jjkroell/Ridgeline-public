@@ -119,17 +119,27 @@ func (m *Mailer) dial(addr string) (*smtp.Client, error) {
 	return c, nil
 }
 
+// sanitizeHeader strips CR/LF from a header value so a stray newline (from a
+// node name, display name, or a future unvalidated address) can never inject
+// additional SMTP headers (Bcc, etc.). Defense-in-depth: header values are also
+// validated/encoded upstream, but we never emit a raw newline at the boundary.
+func sanitizeHeader(v string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
+}
+
 // build assembles an RFC 5322 multipart/alternative message.
 func (m *Mailer) build(to, subject, text, html string) []byte {
-	from := m.cfg.From
+	to = sanitizeHeader(to)
+	from := sanitizeHeader(m.cfg.From)
 	if m.cfg.FromName != "" {
-		from = fmt.Sprintf("%s <%s>", mime.QEncoding.Encode("utf-8", m.cfg.FromName), m.cfg.From)
+		from = fmt.Sprintf("%s <%s>", mime.QEncoding.Encode("utf-8", m.cfg.FromName), sanitizeHeader(m.cfg.From))
 	}
 	boundary := "rl_" + randToken()
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", to)
-	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
+	// Q-encoding already escapes control chars; sanitize first as belt-and-suspenders.
+	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", sanitizeHeader(subject)))
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 	fmt.Fprintf(&b, "Message-ID: <%s@%s>\r\n", randToken(), hostOf(m.cfg.From))
 	b.WriteString("MIME-Version: 1.0\r\n")

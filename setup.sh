@@ -217,12 +217,14 @@ if [[ "$SERVE_CHOICE" == "1" ]]; then
 fi
 
 # ===========================================================================
-# 7. Admin token
+# 7. Admin access
 # ===========================================================================
 echo; hr; info "${BOLD}Admin access${RESET}"
-GEN_TOKEN="$(head -c 32 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n' || true)"
-[[ -z "$GEN_TOKEN" ]] && GEN_TOKEN="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
-ask ADMIN_TOKEN "Admin token (protects the /admin panel)" "$GEN_TOKEN"
+say "There's no admin password to set here. The ${BOLD}first account you register${RESET}"
+say "on the running site automatically becomes the protected owner / admin (it gets"
+say "the /admin console, is auto-verified, and can't be demoted or deleted)."
+say "${YELLOW}➜ As soon as the site is up, open /login → \"Create account\" and register"
+say "  your own account before sharing the URL.${RESET}"
 
 LISTEN_ADDR="0.0.0.0:8080"
 DB_PATH="/data/ridgeline.db"
@@ -252,7 +254,7 @@ export SITE_NAME SITE_TAGLINE SITE_URL SITE_DESC PRIVACY_CONTACT MAP_LAT MAP_LON
 	RADIO_FREQ RADIO_BW RADIO_SF RADIO_CR \
 	MQTT_BROKER MQTT_CLIENTID MQTT_USER MQTT_PASS MQTT_TOPICS \
 	EMAIL_ENABLED EMAIL_HOST EMAIL_PORT EMAIL_USER EMAIL_PASS EMAIL_FROM EMAIL_FROMNAME EMAIL_BASEURL \
-	ADMIN_TOKEN LISTEN_ADDR DB_PATH CADDY_ADDR
+	LISTEN_ADDR DB_PATH CADDY_ADDR
 # Section text vars are dynamically named (SECTION_0_HEADING, …); export by pattern.
 for __i in $(seq 0 "$SECTION_COUNT"); do
 	export "SECTION_${__i}_HEADING" 2>/dev/null || true
@@ -388,7 +390,6 @@ cfg = {
         'clientID': os.environ['MQTT_CLIENTID'],
         'topics': topics,
     },
-    'adminToken': os.environ['ADMIN_TOKEN'],
 }
 if os.environ['MQTT_USER']:
     cfg['mqtt']['username'] = os.environ['MQTT_USER']

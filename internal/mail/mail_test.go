@@ -8,6 +8,30 @@ import (
 	"github.com/jjkroell/ridgeline/internal/config"
 )
 
+func TestBuildStripsHeaderInjection(t *testing.T) {
+	m := New(config.Email{
+		Host: "smtp.example.com", Port: 587, Username: "u", Password: "p",
+		From: "noreply@example.com", FromName: "Ridgeline", BaseURL: "https://x/",
+	}, slog.Default())
+
+	// A recipient and a subject both carrying a CRLF + injected Bcc header.
+	msg := string(m.build(
+		"victim@example.com\r\nBcc: attacker@evil.com",
+		"New note on Node\r\nBcc: attacker@evil.com",
+		"plain body", "<p>html body</p>",
+	))
+
+	// No header line may begin with the injected Bcc — the CRLF must be stripped
+	// (To) or escaped (Subject Q-encoding), never emitted raw.
+	if strings.Contains(msg, "\r\nBcc:") {
+		t.Errorf("header injection succeeded — a raw Bcc line appeared:\n%s", msg)
+	}
+	// The To header stays a single line with the newline removed.
+	if !strings.Contains(msg, "To: victim@example.comBcc: attacker@evil.com\r\n") {
+		t.Errorf("To header not sanitized as expected:\n%s", msg)
+	}
+}
+
 func TestDisabledMailerIsNoOp(t *testing.T) {
 	m := New(config.Email{}, slog.Default())
 	if m.Enabled() {

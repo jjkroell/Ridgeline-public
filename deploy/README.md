@@ -30,8 +30,9 @@ If you'd rather configure by hand:
 
    ```bash
    cp deploy/config.example.json deploy/config.json
-   # edit deploy/config.json: set a strong adminToken, your MQTT broker/topics,
-   # and (optionally) the email block for account verification.
+   # edit deploy/config.json: set your MQTT broker/topics and (optionally) the
+   # email block for account verification. (There's no admin token — the first
+   # account you register on the site becomes the owner/admin.)
    ```
 
    For an **authenticated broker**, set `mqtt.username` / `mqtt.password` (they're

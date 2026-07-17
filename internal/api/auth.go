@@ -129,6 +129,12 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "display name must be 64 characters or fewer")
 		return
 	}
+	// Throttle before doing any work: bounds mass verification-email sends,
+	// quota burn, and account-existence enumeration via the taken-email path.
+	if !s.emailRateOK(r, email) {
+		writeErr(w, http.StatusTooManyRequests, "too many attempts; please try again in a few minutes")
+		return
+	}
 
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -255,6 +261,13 @@ func (s *Server) authResendVerification(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
+	// Throttle before the lookup so a victim's inbox can't be flooded with resend
+	// emails. The 429 is returned regardless of whether the account exists, so it
+	// stays a non-enumerating endpoint.
+	if !s.emailRateOK(r, email) {
+		writeErr(w, http.StatusTooManyRequests, "too many requests; please try again in a few minutes")
+		return
+	}
 	if user, ok, err := s.store.GetUserByEmail(email); err == nil && ok && !user.EmailVerified {
 		s.sendVerificationEmail(user)
 	}

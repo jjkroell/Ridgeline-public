@@ -38,6 +38,10 @@ type Server struct {
 	analytics *analytics.Engine
 	keyChal   *keyChallengeStore // pending private-key ownership challenges
 	mail      mailSender         // outbound transactional email (nil/disabled ok)
+	// Rate limiters for the unauthenticated email-sending endpoints (register,
+	// resend-verification), keyed by client IP and by target email address.
+	emailIPLimiter   *rateLimiter
+	emailAddrLimiter *rateLimiter
 }
 
 // SetAnalytics attaches the analytics engine used by the node-detail endpoint.
@@ -60,9 +64,13 @@ func New(st *store.Store, log *slog.Logger, version, webDir string) *Server {
 		version: version,
 		webDir:  webDir,
 		hub:     newHub(),
-		// Dev: allow any origin. Tighten before exposing publicly.
-		up:      websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }},
+		// Only allow the live WebSocket from the site's own origin (or non-browser
+		// clients that send no Origin); blocks cross-site WebSocket hijacking.
+		up:      websocket.Upgrader{CheckOrigin: sameOriginWS},
 		keyChal: newKeyChallengeStore(),
+		// ~5 emails/IP then 1 every 2 min; ~2 per target address then 1 every 10 min.
+		emailIPLimiter:   newRateLimiter(1.0/120, 5),
+		emailAddrLimiter: newRateLimiter(1.0/600, 2),
 	}
 }
 

@@ -120,8 +120,8 @@ account first — it becomes the protected owner/admin (see the ⚠️ owner not
 
 `./setup.sh` is interactive. Every question shows a `[default]` in dim text —
 **press Enter to accept it**. You can re-run the script any time to change your
-answers; it just overwrites the same files. Passwords and the admin token are
-never echoed to the screen.
+answers; it just overwrites the same files. Passwords (e.g. SMTP) are never
+echoed to the screen.
 
 It asks in seven short sections:
 
@@ -179,8 +179,9 @@ How the site is reached from the internet:
    on plain HTTP (`:80`).
 
 ### 7. Admin access
-An **admin token** protects the `/admin` console. The installer offers a strong
-random one by default — press Enter to accept it, or paste your own.
+There's no admin token to set. The **first account registered** on the running
+site becomes the protected owner/admin (see the ⚠️ note at the top). The installer
+just reminds you to create yours first, before sharing the URL.
 
 Finally it prints a **review** of your answers and asks for confirmation before
 writing anything. If Docker is available, it offers to **build and launch** the
@@ -193,7 +194,7 @@ minutes); otherwise it tells you the one command to run when you're ready.
 |------|-------------------|----------|
 | `web/.env` | No (gitignored) | Build-time site name, region, map center |
 | `web/src/lib/site-content.ts` | Yes | About-page content + radio settings table |
-| `deploy/config.json` | No (gitignored) | Admin token, MQTT + email settings |
+| `deploy/config.json` | No (gitignored) | MQTT + email settings |
 | `deploy/.env` | No (gitignored) | Host UID/GID for the container |
 | `deploy/Caddyfile` | Yes | Your domain / TLS mode |
 | `web/src/app.html`, `web/static/{sitemap.xml,robots.txt}` | Yes | Your name/URL in crawl-time SEO |

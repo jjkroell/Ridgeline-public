@@ -8,7 +8,7 @@ them by hand and rebuild. Nothing points back at any particular mesh or server.
 
 | File | Committed? | What it holds |
 |------|-----------|---------------|
-| `deploy/config.json` | **No** (gitignored) | Runtime secrets: admin token, MQTT broker + credentials, SMTP block |
+| `deploy/config.json` | **No** (gitignored) | Runtime config: MQTT broker + credentials, SMTP block |
 | `deploy/.env` | **No** (gitignored) | Host `RIDGELINE_UID`/`GID` for the container |
 | `deploy/Caddyfile` | Yes | Site address / TLS (a domain, or `:80` behind a proxy) |
 | `deploy/mosquitto.conf` | Yes | Bundled broker (anonymous by default) |
@@ -69,7 +69,6 @@ automatically shows a granular analytics opt-in and the policy lists it.
     "topics": ["meshcore/+/+/packets", "meshcore/+/+/status"],
     "username": "", "password": ""         // set for an authenticated broker; empty = anonymous
   },
-  "adminToken": "a-long-random-secret",     // protects /admin
   "email": {                                 // optional; omit to disable email
     "host": "smtp-relay.example.com", "port": 587,
     "username": "...", "password": "...",
@@ -81,6 +80,12 @@ automatically shows a granular analytics opt-in and the policy lists it.
 
 Email is **fully optional**. With no `email` block, accounts still work —
 registration just auto-verifies instead of sending a confirmation link.
+
+There is **no admin token/password** in the config. Admin access is by account:
+the **first account registered** on a fresh deployment becomes the protected
+owner/admin (gets `/admin`, auto-verified, can't be demoted or deleted). Register
+your own account first, before sharing the URL. A legacy `adminToken` key in an
+old config is ignored.
 
 ## Serving & TLS (`deploy/Caddyfile`)
 

@@ -18,11 +18,10 @@ type Config struct {
 	WebDir string `json:"webDir"`
 	// MQTT configures the upstream packet source.
 	MQTT MQTT `json:"mqtt"`
-	// AdminToken gates the /api/admin/* endpoints (detection, quarantine,
-	// purge). The admin panel sends it as a Bearer token. Empty disables the
-	// admin API entirely (safe default). Serve over TLS — this token grants
-	// destructive powers.
-	AdminToken string `json:"adminToken"`
+	// NOTE: there is no admin token. The /api/admin/* endpoints are gated by the
+	// account is_admin flag (session auth); the first account registered on a
+	// fresh deployment becomes the protected owner/admin. A legacy "adminToken"
+	// key in an old config.json is simply ignored.
 	// ScrubArtifacts enables the periodic auto-removal of packet-corruption
 	// artifacts (phantom node records whose public key arrived corrupted). Only
 	// high-confidence artifacts are ever deleted. Defaults to true; set false to
