@@ -4,6 +4,17 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.2.1] — 2026-07-17
+
+Hardening follow-up to v0.2.0.
+
+### Security
+- Cap request bodies at 64 KB via a `MaxBytesReader` middleware on all routes
+  (except the `/api/live` WebSocket). Endpoint length limits were previously
+  enforced only after fully decoding the JSON body, so an unbounded POST could
+  buffer arbitrary memory before any check ran; the cap keeps memory bounded and
+  the handler returns its usual 400.
+
 ## [v0.2.0] — 2026-07-17
 
 Security hardening plus a one-command updater. **Recommended update for anyone
@@ -21,11 +32,6 @@ running v0.1.0.**
 - Remove the dead `adminToken` config field and its misleading "protects /admin"
   framing. Admin access is the **first registered account** (the protected owner);
   a leftover `adminToken` in an old `config.json` is now simply ignored.
-- Cap request bodies at 64 KB via a `MaxBytesReader` middleware on all routes
-  (except the `/api/live` WebSocket). Endpoint length limits were previously
-  enforced only after fully decoding the JSON body, so an unbounded POST could
-  buffer arbitrary memory before any check ran; the cap keeps memory bounded and
-  the handler returns its usual 400.
 
 ### Added
 - `update.sh` — one command to pull the latest, rebuild, restart, and wait for
