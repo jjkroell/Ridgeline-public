@@ -5,7 +5,7 @@
 	// (e.g. /nodes/[pubkey]) without having visited a full map route first.
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import QRCode from 'qrcode';
-	import { api, type Node, type NodeAnalytics, type NodeHistoryEntry, type NodeActivity, type BlockEntry } from '$lib/api';
+	import { api, type Node, type NodeAnalytics, type NodeHistoryEntry, type NodeObserverStat, type NodeActivity, type BlockEntry } from '$lib/api';
 	import { basemapStyleUrl, collapseAttribution } from '$lib/map-basemap';
 	import { isLight } from '$lib/map-util';
 	import { hasWebGL } from '$lib/webgl';
@@ -64,6 +64,35 @@
 		loadHistory();
 	}
 
+	// "Heard by" observers over a selectable range. The fixed analytics snapshot
+	// only spans a few hours; since nodes advert roughly every ~30h, that window
+	// rarely catches an advert — so this queries on demand over a wider range.
+	const obsRanges = [
+		{ label: '6h', sec: 21600 },
+		{ label: '24h', sec: 86400 },
+		{ label: '3d', sec: 259200 },
+		{ label: '7d', sec: 604800 }
+	];
+	let observers = $state<NodeObserverStat[]>([]);
+	let obsRange = $state(259200); // 3d — wide enough to span a typical advert cadence
+	let obsLoading = $state(false);
+
+	async function loadObservers() {
+		obsLoading = true;
+		try {
+			observers = await api.nodeObservers(pubkey, obsRange);
+		} catch {
+			observers = [];
+		} finally {
+			obsLoading = false;
+		}
+	}
+	function setObsRange(sec: number) {
+		if (sec === obsRange) return;
+		obsRange = sec;
+		loadObservers();
+	}
+
 	// Weekday×hour activity heatmap (full page only).
 	let heatmap = $state<NodeActivity | null>(null);
 	async function loadHeatmap() {
@@ -97,6 +126,7 @@
 	onMount(() => {
 		refresh();
 		if (!compact) {
+			loadObservers(); // "Heard by" over a wider, selectable range
 			loadHistory(); // snapshot view skips the history list + heatmap
 			loadHeatmap();
 		}
@@ -521,46 +551,35 @@
 				{/if}
 			</section>
 
-			<!-- Heard By -->
+			<!-- Heard By (observers that received this node's adverts, over a
+			     selectable range — adverts are ~30h apart, so 6h often shows none) -->
 			<section class="panel">
 				<div class="border-line/70 flex items-center gap-2.5 border-b px-5 py-3">
 					<h3 class="font-display text-fg text-sm font-700 tracking-wide">HEARD BY</h3>
-					<span class="label ml-auto tnum">{detail?.observers.length ?? 0} observer{(detail?.observers.length ?? 0) === 1 ? '' : 's'}</span>
+					<span class="label tnum">{observers.length} observer{observers.length === 1 ? '' : 's'}</span>
+					<div class="ml-auto flex items-center gap-1">
+						{#each obsRanges as r (r.sec)}
+							<button
+								onclick={() => setObsRange(r.sec)}
+								class="label rounded-[var(--radius)] border px-2 py-0.5 transition-colors {obsRange === r.sec ? 'border-signal text-signal' : 'border-line text-fg-faint hover:text-fg'}"
+								>{r.label}</button
+							>
+						{/each}
+					</div>
 				</div>
-				{#if !detail || detail.observers.length === 0}
-					<div class="text-fg-faint px-5 py-8 text-center text-sm">No observations in the last 6 hours.</div>
+				{#if obsLoading && observers.length === 0}
+					<div class="text-fg-faint px-5 py-8 text-center text-sm">Loading…</div>
+				{:else if observers.length === 0}
+					<div class="text-fg-faint px-5 py-8 text-center text-sm">No adverts heard in this range.</div>
 				{:else}
 					<div class="divide-line/40 divide-y">
-						{#each detail.observers as o (o.id)}
+						{#each observers as o (o.id)}
 							<div class="flex items-center gap-3 px-5 py-2 text-sm">
 								<span class="text-fg min-w-0 flex-1 truncate font-mono text-xs">{o.id}</span>
 								{#if o.region}<span class="label !text-[0.58rem]">{o.region}</span>{/if}
-								<span class="font-mono text-fg-faint w-12 text-right text-xs tnum">{o.count} pkt</span>
+								<span class="font-mono text-fg-faint w-14 text-right text-xs tnum">{o.count} advert{o.count === 1 ? '' : 's'}</span>
 								<span class="font-mono w-14 text-right text-xs tnum" style="color:{snrColor(o.avgSnr)}">{o.avgSnr != null ? o.avgSnr.toFixed(1) + ' dB' : '—'}</span>
 								<span class="font-mono text-fg-faint w-16 text-right text-xs tnum">{o.avgRssi != null ? o.avgRssi.toFixed(0) + ' dBm' : '—'}</span>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</section>
-
-			<!-- Recent packets -->
-			<section class="panel">
-				<div class="border-line/70 flex items-center gap-2.5 border-b px-5 py-3">
-					<h3 class="font-display text-fg text-sm font-700 tracking-wide">RECENT PACKETS</h3>
-					<span class="label ml-auto tnum">{detail?.recentPackets.length ?? 0}</span>
-				</div>
-				{#if !detail || detail.recentPackets.length === 0}
-					<div class="text-fg-faint px-5 py-8 text-center text-sm">No recent packets from this node.</div>
-				{:else}
-					<div class="divide-line/40 divide-y">
-						{#each detail.recentPackets as p (p.messageHash + p.receivedAt)}
-							<div class="flex items-center gap-3 px-5 py-2 text-sm">
-								<Tooltip text={fmtAbs(p.receivedAt)} class="w-10 shrink-0"><span class="font-mono text-fg-faint text-xs tnum">{ago(p.receivedAt)}</span></Tooltip>
-								<PayloadTag type={p.payloadType} />
-								<span class="font-mono text-fg-dim min-w-0 flex-1 truncate text-xs">via {p.observerId ?? '—'}</span>
-								<span class="font-mono text-fg-dim text-xs tnum">{p.pathHops} hop{p.pathHops === 1 ? '' : 's'}</span>
-								<span class="font-mono w-14 text-right text-xs tnum" style="color:{snrColor(p.snr)}">{fmtSnr(p.snr)} dB</span>
 							</div>
 						{/each}
 					</div>

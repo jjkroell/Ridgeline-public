@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/nodes", s.nodes)
 	mux.HandleFunc("GET /api/nodes/{pubkey}", s.nodeDetail)
 	mux.HandleFunc("GET /api/nodes/{pubkey}/history", s.nodeHistory)
+	mux.HandleFunc("GET /api/nodes/{pubkey}/observers", s.nodeObservers)
 	mux.HandleFunc("GET /api/nodes/{pubkey}/heatmap", s.nodeHeatmap)
 	mux.HandleFunc("GET /api/nodes/{pubkey}/claim", s.nodeClaimStatus)
 	mux.HandleFunc("GET /api/nodes/{pubkey}/notes", s.nodeNotes)
@@ -398,6 +399,28 @@ func (s *Server) nodeHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, entries)
+}
+
+// nodeObservers returns, per observer, the reception of a node's adverts over a
+// selectable time range (default 3 days). Computed on demand — the fixed-window
+// snapshot's "Heard by" list only spans a few hours, which rarely catches a
+// node's ~30h advert cadence, so the detail page lets the user widen the range.
+func (s *Server) nodeObservers(w http.ResponseWriter, r *http.Request) {
+	pubkey := strings.ToUpper(r.PathValue("pubkey"))
+	sinceSec := queryInt(r, "since", 3*86400, 1, 7*86400)
+	cutoff := time.Now().Add(-time.Duration(sinceSec) * time.Second).UTC().Format(time.RFC3339Nano)
+
+	nodes, err := s.store.ListNodes()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	obs, err := analytics.NodeObservers(s.store, nodes, pubkey, cutoff, 0)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, obs)
 }
 
 // nodeHeatmap returns a node's weekday×hour activity grid over the last `days`.

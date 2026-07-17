@@ -4,7 +4,7 @@
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import QRCode from 'qrcode';
-	import { api, type Node, type NodeAnalytics, type BlockEntry } from '$lib/api';
+	import { api, type Node, type NodeAnalytics, type NodeObserverStat, type BlockEntry } from '$lib/api';
 	import { ago, shortKey, fmtNum, fmtSnr, snrColor, roleColor, roleLabel, nodeStatus, fmtRadio, fmtCoord } from '$lib/format';
 	import { nodeHashId } from '$lib/hash-ids';
 	import { favorites } from '$lib/favorites.svelte';
@@ -37,8 +37,36 @@
 			loaded = true;
 		}
 	}
+	// "Heard by" observers over a selectable range. Queried on demand so the range
+	// can span a node's advert cadence (~30h) — the fixed snapshot window can't.
+	const obsRanges = [
+		{ label: '6h', sec: 21600 },
+		{ label: '24h', sec: 86400 },
+		{ label: '3d', sec: 259200 },
+		{ label: '7d', sec: 604800 }
+	];
+	let observers = $state<NodeObserverStat[]>([]);
+	let obsRange = $state(259200); // 3d
+	let obsLoading = $state(false);
+	async function loadObservers() {
+		obsLoading = true;
+		try {
+			observers = await api.nodeObservers(pubkey, obsRange);
+		} catch {
+			observers = [];
+		} finally {
+			obsLoading = false;
+		}
+	}
+	function setObsRange(sec: number) {
+		if (sec === obsRange) return;
+		obsRange = sec;
+		loadObservers();
+	}
+
 	onMount(() => {
 		refresh();
+		loadObservers();
 		const t = setInterval(refresh, 15000);
 		return () => clearInterval(t);
 	});
@@ -240,11 +268,29 @@
 			</div>
 		{/if}
 
-		<!-- heard by -->
-		{#if detail?.observers?.length}
-			<h2 class="font-display text-fg mt-5 mb-2 px-1 text-xs font-700 tracking-wide">HEARD BY · {detail.observers.length}</h2>
+		<!-- heard by (adverts received, over a selectable range — ~30h cadence
+		     means a short window often shows none) -->
+		<div class="mt-5 mb-2 flex items-center gap-2 px-1">
+			<h2 class="font-display text-fg text-xs font-700 tracking-wide">HEARD BY · {observers.length}</h2>
+			<div class="ml-auto flex items-center gap-1">
+				{#each obsRanges as r (r.sec)}
+					<button
+						onclick={() => setObsRange(r.sec)}
+						class="rounded-full border px-2 py-0.5 text-[0.6rem] font-600 transition-colors {obsRange === r.sec ? 'border-signal text-signal' : 'border-line text-fg-faint'}"
+						>{r.label}</button
+					>
+				{/each}
+			</div>
+		</div>
+		{#if obsLoading && observers.length === 0}
+			<div class="text-fg-faint px-1 py-3 text-xs">Loading…</div>
+		{:else if observers.length === 0}
+			<div class="border-line/60 bg-panel text-fg-faint rounded-2xl border px-4 py-4 text-center text-xs">
+				No adverts heard in this range.
+			</div>
+		{:else}
 			<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
-				{#each detail.observers as o (o.id)}
+				{#each observers as o (o.id)}
 					<a href="/m/observers/{encodeURIComponent(o.id)}" class="active:bg-line/40 flex items-center gap-3 px-4 py-2.5">
 						<span class="text-fg min-w-0 flex-1 truncate text-sm">{o.id}</span>
 						<span class="font-mono text-xs tnum" style="color:{snrColor(o.avgSnr)}">{fmtSnr(o.avgSnr)} dB</span>
@@ -268,19 +314,5 @@
 			</div>
 		{/if}
 
-		<!-- recent packets -->
-		{#if detail?.recentPackets?.length}
-			<h2 class="font-display text-fg mt-5 mb-2 px-1 text-xs font-700 tracking-wide">RECENT PACKETS</h2>
-			<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
-				{#each detail.recentPackets.slice(0, 12) as pk (pk.messageHash)}
-					<div class="flex items-center gap-2.5 px-4 py-2">
-						<span class="text-fg-dim w-20 shrink-0 truncate text-xs">{pk.payloadType}</span>
-						<span class="text-fg-dim flex-1 truncate font-mono text-[0.62rem]">{pk.pathHops} hop{pk.pathHops === 1 ? '' : 's'}</span>
-						<span class="font-mono text-xs tnum" style="color:{snrColor(pk.snr)}">{fmtSnr(pk.snr)}</span>
-						<span class="text-fg-faint w-9 text-right font-mono text-[0.62rem]">{ago(pk.receivedAt)}</span>
-					</div>
-				{/each}
-			</div>
-		{/if}
 	{/if}
 </div>

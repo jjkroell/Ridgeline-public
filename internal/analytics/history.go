@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/jjkroell/ridgeline/internal/meshcore"
@@ -66,6 +67,71 @@ func NodeHistory(st *store.Store, nodes []store.Node, pubkey, sinceISO string, s
 			}
 		}
 	}
+	return out, nil
+}
+
+// NodeObservers aggregates, per observer, the reception of a node's own adverts
+// over an arbitrary time range (received at or after sinceISO). Unlike the
+// analytics snapshot's fixed advert window, this queries the store on demand so
+// the UI can widen the range to span a node's advert cadence (often ~30h),
+// which the short snapshot window rarely captures. Returned newest-heard-first
+// isn't meaningful here; results are sorted by reception count, descending.
+func NodeObservers(st *store.Store, nodes []store.Node, pubkey, sinceISO string, scanCap int) ([]ObserverStat, error) {
+	if scanCap <= 0 || scanCap > 200000 {
+		scanCap = 80000
+	}
+	pubkey = strings.ToUpper(pubkey)
+
+	raws, err := st.RawWindow(sinceISO, scanCap)
+	if err != nil {
+		return nil, err
+	}
+
+	type acc struct {
+		region          string
+		count           int
+		snrSum, rssiSum float64
+		snrN, rssiN     int
+	}
+	byObs := map[string]*acc{}
+	for _, ro := range raws {
+		pkt, err := meshcore.DecodeHex(ro.RawHex)
+		if err != nil || pkt == nil || pkt.Advert == nil {
+			continue
+		}
+		if strings.ToUpper(pkt.Advert.PublicKey) != pubkey {
+			continue
+		}
+		a := byObs[ro.ObserverID]
+		if a == nil {
+			a = &acc{region: ro.Region}
+			byObs[ro.ObserverID] = a
+		}
+		a.count++
+		if ro.SNR != nil {
+			a.snrSum += *ro.SNR
+			a.snrN++
+		}
+		if ro.RSSI != nil {
+			a.rssiSum += *ro.RSSI
+			a.rssiN++
+		}
+	}
+
+	out := make([]ObserverStat, 0, len(byObs))
+	for id, a := range byObs {
+		os := ObserverStat{ID: id, Region: a.region, Count: a.count}
+		if a.snrN > 0 {
+			v := a.snrSum / float64(a.snrN)
+			os.AvgSNR = &v
+		}
+		if a.rssiN > 0 {
+			v := a.rssiSum / float64(a.rssiN)
+			os.AvgRSSI = &v
+		}
+		out = append(out, os)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
 	return out, nil
 }
 

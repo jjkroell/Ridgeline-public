@@ -409,6 +409,9 @@ export const api = {
 	/** A node's stored observations (own adverts + relayed packets) over the last sinceSec seconds, newest first. */
 	nodeHistory: (pubkey: string, sinceSec = 86400, limit = 300) =>
 		get<NodeHistoryEntry[]>(`/api/nodes/${encodeURIComponent(pubkey)}/history?since=${sinceSec}&limit=${limit}`),
+	/** Per-observer reception of a node's adverts over the last sinceSec seconds (on demand, so the range can span the node's advert cadence). */
+	nodeObservers: (pubkey: string, sinceSec = 3 * 86400) =>
+		get<NodeObserverStat[]>(`/api/nodes/${encodeURIComponent(pubkey)}/observers?since=${sinceSec}`),
 	/** A node's weekday×hour activity heatmap over the last `days` days. */
 	nodeHeatmap: (pubkey: string, days = 7) =>
 		get<NodeActivity>(`/api/nodes/${encodeURIComponent(pubkey)}/heatmap?days=${days}`),
