@@ -28,6 +28,7 @@ them by hand and rebuild. Nothing points back at any particular mesh or server.
 | `VITE_SITE_TAGLINE` | `MeshCore Observatory` | Line under the wordmark |
 | `VITE_SITE_URL` | *(empty)* | Absolute origin for canonical/social URLs |
 | `VITE_SITE_DESCRIPTION` | generic | SEO description fallback |
+| `VITE_PRIVACY_CONTACT` | *(empty)* | Data-controller email shown on `/privacy` |
 | `VITE_MAP_CENTER_LAT` | `20` | Default map latitude |
 | `VITE_MAP_CENTER_LON` | `0` | Default map longitude |
 | `VITE_MAP_ZOOM` | `3` | Default map zoom (1 world → 12 city) |
@@ -41,6 +42,19 @@ reaching it through a reverse proxy.
 - `ABOUT.kicker` / `title` / `intro` / `sections[]` / `footer` — your words only.
 - `ABOUT.showRadio` + `RADIO_PARAMS` — the LoRa settings table (frequency,
   bandwidth, spreading factor, coding rate). Empty `RADIO_PARAMS` hides it.
+
+## Privacy & cookie consent
+
+The app ships a GDPR/PIPEDA cookie-consent banner and a `/privacy` page out of the
+box. By default it sets only strictly-necessary cookies (`rl_session`, `rl_csrf`)
+and functional `localStorage`, and loads **no analytics or third-party trackers** —
+so the banner is a simple "essential cookies only" notice. Set `VITE_PRIVACY_CONTACT`
+to surface a data-controller email on the policy page.
+
+To add privacy-respecting, opt-in analytics for your own deployment, edit
+`web/src/lib/analytics.ts` (set `ANALYTICS_ENABLED = true`, name your provider, and
+inject its script only when `consent.analytics` is true). The banner then
+automatically shows a granular analytics opt-in and the policy lists it.
 
 ## Backend (`deploy/config.json`)
 

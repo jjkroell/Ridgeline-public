@@ -80,6 +80,8 @@ ask SITE_URL     "Public site URL (e.g. https://mesh.example.com, blank to skip)
 SITE_URL="${SITE_URL%/}"   # strip trailing slash
 ask SITE_DESC    "One-line description of your mesh (for search engines)" \
 	"A live observatory for a MeshCore LoRa mesh network."
+say "${DIM}Shown on the /privacy page as the data-controller contact (GDPR/PIPEDA).${RESET}"
+ask PRIVACY_CONTACT "Privacy contact email (blank to omit)" ""
 
 # ===========================================================================
 # 2. Region / default map view
@@ -245,7 +247,7 @@ yesno "Write these settings?" y || die "Aborted — nothing was written."
 echo; info "Writing configuration…"
 
 # Export everything the python writers below read from the environment.
-export SITE_NAME SITE_TAGLINE SITE_URL SITE_DESC MAP_LAT MAP_LON MAP_ZOOM \
+export SITE_NAME SITE_TAGLINE SITE_URL SITE_DESC PRIVACY_CONTACT MAP_LAT MAP_LON MAP_ZOOM \
 	ABOUT_MODE ABOUT_KICKER ABOUT_TITLE ABOUT_INTRO ABOUT_FOOTER SECTION_COUNT SHOW_RADIO \
 	RADIO_FREQ RADIO_BW RADIO_SF RADIO_CR \
 	MQTT_BROKER MQTT_CLIENTID MQTT_USER MQTT_PASS MQTT_TOPICS \
@@ -266,6 +268,7 @@ vals = {
     'VITE_SITE_TAGLINE':     os.environ['SITE_TAGLINE'],
     'VITE_SITE_URL':         os.environ['SITE_URL'],
     'VITE_SITE_DESCRIPTION': os.environ['SITE_DESC'],
+    'VITE_PRIVACY_CONTACT':  os.environ.get('PRIVACY_CONTACT', ''),
     'VITE_MAP_CENTER_LAT':   os.environ['MAP_LAT'],
     'VITE_MAP_CENTER_LON':   os.environ['MAP_LON'],
     'VITE_MAP_ZOOM':         os.environ['MAP_ZOOM'],

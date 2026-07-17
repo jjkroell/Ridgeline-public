@@ -10,7 +10,9 @@
 	import { overview } from '$lib/overview.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import { announce } from '$lib/announce.svelte';
+	import { consent } from '$lib/consent.svelte';
 	import AnnouncementModal from '$lib/components/AnnouncementModal.svelte';
+	import CookieConsent from '$lib/components/CookieConsent.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import { SITE_NAME, SITE_TAGLINE } from '$lib/site';
@@ -26,6 +28,7 @@
 		overview.init();
 		auth.init();
 		live.start();
+		consent.init();
 		announce.init();
 	});
 
@@ -87,6 +90,8 @@
 
 <!-- App-wide "what's new" modal (self-guards on announce.open). -->
 <AnnouncementModal />
+<!-- Cookie-consent banner (self-guards on consent.open); shown on desktop + /m. -->
+<CookieConsent />
 <!-- The /m app layout mounts its own ConfirmDialog; only render one here on the
      desktop app so the confirmer singleton doesn't drive two stacked dialogs. -->
 {#if !isMobileApp}
@@ -251,6 +256,7 @@
 				{/if}
 				<span class="label ml-auto tnum">{live.total}</span>
 			</div>
+			<a href="/privacy" class="label !text-fg-faint hover:!text-fg-dim mt-2 block transition-colors">Privacy &amp; cookies</a>
 		</div>
 	</aside>
 

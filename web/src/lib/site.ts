@@ -23,6 +23,10 @@ export const SITE_DESCRIPTION: string =
 	import.meta.env.VITE_SITE_DESCRIPTION ||
 	'A live observatory for a MeshCore LoRa mesh network — nodes, coverage and packets in real time.';
 
+/** Privacy / data-controller contact shown on the /privacy page. Empty renders a
+ * generic "the operator of this site" with no email; setup.sh fills it in. */
+export const PRIVACY_CONTACT: string = import.meta.env.VITE_PRIVACY_CONTACT || '';
+
 // --- Default map view for your region -------------------------------------
 // setup.sh writes these from the install Q&A. The default is a wide, neutral
 // view so a fresh install with no nodes still shows a sensible map; once you
