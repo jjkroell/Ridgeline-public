@@ -14,6 +14,19 @@ network and personalizes everything — name, map, radio settings, About page,
 broker, email, domain — before it builds. There are no phone-home calls, no
 analytics, and no hardcoded locations.
 
+> ## ⚠️ Register your account FIRST — the first account is the owner
+>
+> **The very first account registered on your site automatically becomes the
+> site owner / master admin.** That account is:
+> - made an **administrator** (gets the `/admin` console),
+> - **auto-verified** — it works even before you've set up email, and
+> - **protected** — it can't be demoted, locked out, or deleted by anyone.
+>
+> So the moment your site is live, **go to `/login`, choose "Create account", and
+> register your own account before sharing the URL with anyone.** Whoever
+> registers first owns the deployment; everyone who signs up after that is an
+> ordinary member.
+
 ---
 
 ## Table of contents
@@ -99,6 +112,9 @@ cd ridgeline
 The installer walks you through everything, writes your configuration, and can
 build and launch the whole stack at the end. Prefer to do it by hand? See
 [Manual install](#manual-install).
+
+**➡️ As soon as it's up, open `/login` → "Create account" and register your own
+account first — it becomes the protected owner/admin (see the ⚠️ owner note at the top of this README).**
 
 ## The installer, step by step
 
