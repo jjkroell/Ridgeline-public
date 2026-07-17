@@ -44,6 +44,13 @@ type Server struct {
 	emailAddrLimiter *rateLimiter
 }
 
+// maxRequestBody caps the size of a request body the API will read. Every
+// endpoint decodes small JSON (the largest field is a note, a few KB), so 64 KB
+// is generous headroom while preventing an unbounded POST from exhausting memory
+// during json.Decode. Applied by limitBody to all routes except the WebSocket
+// upgrade, whose "body" is the hijacked connection.
+const maxRequestBody = 64 << 10 // 64 KB
+
 // SetAnalytics attaches the analytics engine used by the node-detail endpoint.
 func (s *Server) SetAnalytics(e *analytics.Engine) { s.analytics = e }
 
@@ -164,7 +171,22 @@ func (s *Server) Handler() http.Handler {
 			s.log.Warn("web dir not found, serving API only", "dir", s.webDir)
 		}
 	}
-	return mux
+	return limitBody(mux)
+}
+
+// limitBody caps request bodies at maxRequestBody so a malicious or buggy client
+// can't force the server to buffer an arbitrarily large payload while decoding.
+// The /api/live WebSocket is skipped: it hijacks the connection rather than
+// reading a request body, and MaxBytesReader would wrap the wrong thing. When a
+// body exceeds the cap the subsequent json.Decode fails and the handler returns
+// its usual 400 — memory stays bounded either way.
+func limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/live" && r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // LiveEvent is the JSON shape broadcast to WebSocket clients per observation.
