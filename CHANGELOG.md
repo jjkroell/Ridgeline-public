@@ -4,7 +4,7 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [v0.3.1] — 2026-07-17
 
 ### Added
 - `setup.sh` now asks whether the install is production or dev/staging. Choosing
