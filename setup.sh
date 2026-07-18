@@ -230,6 +230,20 @@ LISTEN_ADDR="0.0.0.0:8080"
 DB_PATH="/data/ridgeline.db"
 
 # ===========================================================================
+# 8. Install type (production vs dev/staging)
+# ===========================================================================
+echo; hr; info "${BOLD}Install type${RESET}"
+say "A ${BOLD}dev / staging${RESET} install shows a prominent ${YELLOW}\"not the live site\"${RESET} banner"
+say "across the top of every page, so nobody mistakes it for your production site."
+if yesno "Is this a development / staging install?" n; then
+	ENVIRONMENT="dev"
+	say "  ${DIM}Banner enabled (environment = \"dev\"). Change it to \"staging\", or remove the"
+	say "  \"environment\" key from deploy/config.json, to turn the banner off later.${RESET}"
+else
+	ENVIRONMENT=""
+fi
+
+# ===========================================================================
 # Review
 # ===========================================================================
 echo; hr; info "${BOLD}Review${RESET}"
@@ -240,6 +254,7 @@ printf '  %-16s %s\n' "Broker:"     "$MQTT_BROKER $( $SELF_HOST_BROKER && echo '
 printf '  %-16s %s\n' "Email:"      "$( $EMAIL_ENABLED && echo "on ($EMAIL_HOST)" || echo off)"
 printf '  %-16s %s\n' "About page:" "$ABOUT_MODE"
 printf '  %-16s %s\n' "Caddy addr:" "$CADDY_ADDR"
+printf '  %-16s %s\n' "Install type:" "$( [[ -n "$ENVIRONMENT" ]] && echo "$ENVIRONMENT (banner on)" || echo production )"
 echo
 yesno "Write these settings?" y || die "Aborted — nothing was written."
 
@@ -254,7 +269,7 @@ export SITE_NAME SITE_TAGLINE SITE_URL SITE_DESC PRIVACY_CONTACT MAP_LAT MAP_LON
 	RADIO_FREQ RADIO_BW RADIO_SF RADIO_CR \
 	MQTT_BROKER MQTT_CLIENTID MQTT_USER MQTT_PASS MQTT_TOPICS \
 	EMAIL_ENABLED EMAIL_HOST EMAIL_PORT EMAIL_USER EMAIL_PASS EMAIL_FROM EMAIL_FROMNAME EMAIL_BASEURL \
-	LISTEN_ADDR DB_PATH CADDY_ADDR
+	LISTEN_ADDR DB_PATH CADDY_ADDR ENVIRONMENT
 # Section text vars are dynamically named (SECTION_0_HEADING, …); export by pattern.
 for __i in $(seq 0 "$SECTION_COUNT"); do
 	export "SECTION_${__i}_HEADING" 2>/dev/null || true
@@ -391,6 +406,8 @@ cfg = {
         'topics': topics,
     },
 }
+if os.environ.get('ENVIRONMENT'):
+    cfg['environment'] = os.environ['ENVIRONMENT']
 if os.environ['MQTT_USER']:
     cfg['mqtt']['username'] = os.environ['MQTT_USER']
     cfg['mqtt']['password'] = os.environ['MQTT_PASS']

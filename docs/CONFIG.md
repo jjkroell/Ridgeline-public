@@ -74,12 +74,20 @@ automatically shows a granular analytics opt-in and the policy lists it.
     "username": "...", "password": "...",
     "from": "noreply@example.com", "fromName": "Ridgeline",
     "baseURL": "https://mesh.example.com"    // used to build links in emails
-  }
+  },
+  "environment": "dev"                        // optional; "dev"/"staging" shows a
+                                              // "not the live site" banner. Omit
+                                              // (the default) for production.
 }
 ```
 
 Email is **fully optional**. With no `email` block, accounts still work —
 registration just auto-verifies instead of sending a confirmation link.
+
+`environment` is **optional**. Set it to `"dev"` or `"staging"` on a
+non-production instance and every page shows a prominent "not the live site"
+banner (using your site name); omit it for a normal production site. `setup.sh`
+asks about this and sets it for you. It is reported on `/api/health`.
 
 There is **no admin token/password** in the config. Admin access is by account:
 the **first account registered** on a fresh deployment becomes the protected
