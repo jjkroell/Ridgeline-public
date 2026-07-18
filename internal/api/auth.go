@@ -188,6 +188,15 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
+	// Brute-force protection: throttle by client IP and by target account before
+	// doing any password work. Bursts are generous enough that a real user who
+	// mistypes a few times is unaffected, but sustained guessing is bounded. The
+	// 429 is returned before the account lookup, so it reveals nothing about
+	// whether the address exists.
+	if !s.authIPLimiter.Allow(clientIP(r)) || (email != "" && !s.authAddrLimiter.Allow(email)) {
+		writeErr(w, http.StatusTooManyRequests, "too many sign-in attempts; please wait a minute and try again")
+		return
+	}
 	user, ok, err := s.store.GetUserByEmail(email)
 	if err != nil {
 		s.fail(w, err)
@@ -272,6 +281,89 @@ func (s *Server) authResendVerification(w http.ResponseWriter, r *http.Request) 
 		s.sendVerificationEmail(user)
 	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// authForgotPassword starts a password reset. Like resend-verification it always
+// responds 200 (never revealing whether the address has an account) to avoid
+// enumeration; a reset email is only sent for a real account. Throttled per IP +
+// address so it can't be used to flood a victim's inbox or burn email quota.
+func (s *Server) authForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request body")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if !s.emailRateOK(r, email) {
+		writeErr(w, http.StatusTooManyRequests, "too many requests; please try again in a few minutes")
+		return
+	}
+	// Only send for a real, non-blocked account. The owner is included (they must
+	// be able to recover too). Sending to an unverified address is fine — clicking
+	// the link proves inbox control, and reset also verifies the address.
+	if user, ok, err := s.store.GetUserByEmail(email); err == nil && ok && !user.Blocked {
+		s.sendPasswordResetEmail(user)
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// authResetPassword consumes a reset token and sets a new password. On success it
+// revokes every existing session for the account (so a leaked/old session can't
+// linger past a reset), marks the address verified (the click proved inbox
+// control), and logs the user in with a fresh session.
+func (s *Server) authResetPassword(w http.ResponseWriter, r *http.Request) {
+	// Bound token-guessing attempts by IP (the token is 32 random bytes, so this
+	// is defence-in-depth over an already-infeasible brute force).
+	if !s.authIPLimiter.Allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "too many attempts; please try again in a few minutes")
+		return
+	}
+	var req struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request body")
+		return
+	}
+	if len(req.Password) < 8 {
+		writeErr(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+	if len(req.Password) > 200 {
+		writeErr(w, http.StatusBadRequest, "password is too long")
+		return
+	}
+	user, ok, err := s.store.ConsumePasswordReset(strings.TrimSpace(req.Token))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "this reset link is invalid or has expired — request a new one")
+		return
+	}
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	if err := s.store.UpdatePassword(user.ID, hash); err != nil {
+		s.fail(w, err)
+		return
+	}
+	// Revoke all prior sessions, then (if needed) mark verified since the emailed
+	// link proved control of the inbox.
+	s.store.DeleteUserSessions(user.ID)
+	if !user.EmailVerified {
+		s.store.MarkEmailVerified(user.ID)
+		user.EmailVerified = true
+	}
+	s.store.SetUserLastLogin(user.ID)
+	s.log.Info("password reset", "id", user.ID, "email", user.Email)
+	s.startSession(w, r, user)
 }
 
 func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {

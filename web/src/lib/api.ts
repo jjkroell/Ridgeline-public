@@ -515,7 +515,16 @@ export const authApi = {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ email })
-		}).then(() => undefined)
+		}).then(() => undefined),
+	/** Request a password-reset email (always resolves; never reveals account state). */
+	forgotPassword: (email: string) =>
+		fetch('/api/auth/forgot', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ email })
+		}).then(() => undefined),
+	/** Set a new password from an emailed reset token; on success the server logs the user in. */
+	resetPassword: (token: string, password: string) => authReq('/api/auth/reset', { token, password })
 };
 
 /** Self-service account editing (authenticated + CSRF). */

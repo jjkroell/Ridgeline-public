@@ -4,6 +4,22 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.3.2] — 2026-07-17
+
+### Added
+- **Password reset.** A "Forgot password?" flow: request a reset link by email
+  (`POST /api/auth/forgot`, always responds 200 so it never reveals whether an
+  address has an account), then set a new password from the emailed single-use
+  link (`/reset-password`, 1-hour expiry). Completing a reset revokes the
+  account's other sessions, confirms the email address, and signs you in.
+  Available on desktop and mobile.
+
+### Security
+- **Login brute-force protection.** `POST /api/auth/login` is now rate-limited per
+  client IP and per target account (429 when exceeded, returned before the account
+  lookup so it reveals nothing). Bursts stay generous enough for a mistyped
+  password but bound sustained guessing. The reset endpoint is IP-limited too.
+
 ## [v0.3.1] — 2026-07-17
 
 ### Added

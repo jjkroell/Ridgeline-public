@@ -93,6 +93,13 @@ class Auth {
 		return r;
 	}
 
+	/** Set a new password from an emailed reset token; logs the user in on success. */
+	async resetPassword(token: string, password: string) {
+		const r = await authApi.resetPassword(token, password);
+		this.#adopt(r);
+		return r;
+	}
+
 	/** Change display name; updates the cached user on success. */
 	async updateDisplayName(displayName: string) {
 		this.user = await account.updateProfile(this.csrf, displayName);

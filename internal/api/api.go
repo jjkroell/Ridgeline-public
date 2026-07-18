@@ -40,9 +40,13 @@ type Server struct {
 	keyChal   *keyChallengeStore // pending private-key ownership challenges
 	mail      mailSender         // outbound transactional email (nil/disabled ok)
 	// Rate limiters for the unauthenticated email-sending endpoints (register,
-	// resend-verification), keyed by client IP and by target email address.
+	// resend-verification, forgot-password), keyed by client IP and by target email address.
 	emailIPLimiter   *rateLimiter
 	emailAddrLimiter *rateLimiter
+	// Brute-force limiters for the login + password-reset endpoints, keyed by
+	// client IP and by target account (login only).
+	authIPLimiter   *rateLimiter
+	authAddrLimiter *rateLimiter
 }
 
 // maxRequestBody caps the size of a request body the API will read. Every
@@ -83,6 +87,10 @@ func New(st *store.Store, log *slog.Logger, version, webDir string) *Server {
 		// ~5 emails/IP then 1 every 2 min; ~2 per target address then 1 every 10 min.
 		emailIPLimiter:   newRateLimiter(1.0/120, 5),
 		emailAddrLimiter: newRateLimiter(1.0/600, 2),
+		// Login/reset brute-force: ~10 attempts/IP then 1 every 6s; ~5 per account
+		// then 1 every 30s — generous for a mistyped password, tight for guessing.
+		authIPLimiter:   newRateLimiter(1.0/6, 10),
+		authAddrLimiter: newRateLimiter(1.0/30, 5),
 	}
 }
 
@@ -117,6 +125,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/auth/me", s.authMe)
 	mux.HandleFunc("POST /api/auth/verify", s.authVerifyEmail)
 	mux.HandleFunc("POST /api/auth/resend-verification", s.authResendVerification)
+	mux.HandleFunc("POST /api/auth/forgot", s.authForgotPassword)
+	mux.HandleFunc("POST /api/auth/reset", s.authResetPassword)
 	// Self-service account editing (authenticated + CSRF via requireUser).
 	mux.HandleFunc("PUT /api/account/profile", s.requireUser(s.accountUpdateProfile))
 	mux.HandleFunc("POST /api/account/password", s.requireUser(s.accountChangePassword))

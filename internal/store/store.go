@@ -132,6 +132,18 @@ CREATE TABLE IF NOT EXISTS email_verifications (
 );
 CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id);
 
+-- password_resets holds pending password-reset tokens. Same shape as
+-- email_verifications: token_hash is the SHA-256 of the opaque token emailed to
+-- the user (plaintext never stored), one row per outstanding request (a new
+-- request replaces prior rows), short TTL.
+CREATE TABLE IF NOT EXISTS password_resets (
+	token_hash TEXT PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TEXT NOT NULL,
+	expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pw_reset_user ON password_resets(user_id);
+
 -- node_claims records a user's claim on a node. A pending claim carries a
 -- verification code the owner temporarily embeds in the node's advertised name;
 -- the ingest verifier promotes it to 'verified' when a signature-valid advert

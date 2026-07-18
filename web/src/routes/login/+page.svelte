@@ -4,7 +4,7 @@
 	import { authApi, AuthError } from '$lib/api';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 
-	let mode = $state<'login' | 'register'>('login');
+	let mode = $state<'login' | 'register' | 'forgot'>('login');
 	let email = $state('');
 	let password = $state('');
 	let displayName = $state('');
@@ -13,6 +13,9 @@
 	// Set to the address a confirmation link was sent to — shows the "check your
 	// email" panel in place of the form.
 	let sentTo = $state('');
+	// True once a password-reset email has been requested (shows a confirmation
+	// panel; always shown regardless of whether the address had an account).
+	let resetSent = $state(false);
 	// True when a sign-in was refused because the address isn't confirmed yet.
 	let unverified = $state(false);
 	let resent = $state(false);
@@ -28,6 +31,11 @@
 		unverified = false;
 		busy = true;
 		try {
+			if (mode === 'forgot') {
+				await authApi.forgotPassword(email.trim());
+				resetSent = true;
+				return;
+			}
 			if (mode === 'register') {
 				const r = await auth.register(email.trim(), password, displayName.trim());
 				if (r.verificationSent) {
@@ -61,7 +69,7 @@
 		}
 	}
 
-	function swap(to: 'login' | 'register') {
+	function swap(to: 'login' | 'register' | 'forgot') {
 		mode = to;
 		error = '';
 		unverified = false;
@@ -70,7 +78,10 @@
 
 <svelte:head><title>Sign in · Ridgeline</title></svelte:head>
 
-<PageHeader eyebrow="Accounts" title={mode === 'login' ? 'Sign in' : 'Create account'} />
+<PageHeader
+	eyebrow="Accounts"
+	title={mode === 'forgot' ? 'Reset password' : mode === 'login' ? 'Sign in' : 'Create account'}
+/>
 
 <div class="px-6 pb-16 md:px-10">
 	{#if sentTo}
@@ -107,9 +118,34 @@
 				class="text-fg-faint hover:text-fg mt-6 text-xs">← Back to sign in</button
 			>
 		</div>
+	{:else if resetSent}
+		<!-- Password-reset email requested (shown regardless of whether the account exists) -->
+		<div class="panel mx-auto max-w-md px-6 py-8 text-center">
+			<div
+				class="bg-signal/15 text-signal mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+			>
+				<svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8"
+					><path d="M4 6h16v12H4zM4 7l8 6 8-6" stroke-linecap="round" stroke-linejoin="round" /></svg
+				>
+			</div>
+			<h2 class="text-fg text-lg font-700">Check your email</h2>
+			<p class="text-fg-dim mt-2 text-sm leading-relaxed">
+				If an account exists for <strong class="text-fg break-all">{email.trim()}</strong>, we've sent
+				a link to reset its password. The link expires in 1 hour.
+			</p>
+			<button
+				onclick={() => {
+					resetSent = false;
+					password = '';
+					swap('login');
+				}}
+				class="text-fg-faint hover:text-fg mt-6 text-xs">← Back to sign in</button
+			>
+		</div>
 	{:else}
 	<div class="panel mx-auto max-w-md px-6 py-8">
 		<!-- Mode toggle -->
+		{#if mode !== 'forgot'}
 		<div class="border-line/70 mb-6 flex gap-1 rounded-[var(--radius)] border p-1">
 			<button
 				onclick={() => swap('login')}
@@ -126,6 +162,11 @@
 				Create account
 			</button>
 		</div>
+		{:else}
+			<p class="text-fg-dim mb-5 text-sm leading-relaxed">
+				Enter your account email and we'll send you a link to set a new password.
+			</p>
+		{/if}
 
 		<form onsubmit={submit} class="flex flex-col gap-4">
 			{#if mode === 'register'}
@@ -153,18 +194,30 @@
 					class="border-line bg-ink-2 text-fg focus:border-signal w-full rounded-[var(--radius)] border px-3 py-2 text-sm outline-none"
 				/>
 			</label>
-			<label class="block">
-				<span class="label normal-case text-fg-dim mb-1.5 block">Password</span>
-				<input
-					type="password"
-					bind:value={password}
-					required
-					minlength={mode === 'register' ? 8 : undefined}
-					autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
-					placeholder={mode === 'register' ? 'at least 8 characters' : '••••••••'}
-					class="border-line bg-ink-2 text-fg focus:border-signal w-full rounded-[var(--radius)] border px-3 py-2 text-sm outline-none"
-				/>
-			</label>
+			{#if mode !== 'forgot'}
+				<label class="block">
+					<span class="label normal-case text-fg-dim mb-1.5 flex items-baseline justify-between">
+						<span>Password</span>
+						{#if mode === 'login'}
+							<button
+								type="button"
+								onclick={() => swap('forgot')}
+								class="text-signal text-[0.7rem] font-500 normal-case hover:underline"
+								>Forgot password?</button
+							>
+						{/if}
+					</span>
+					<input
+						type="password"
+						bind:value={password}
+						required
+						minlength={mode === 'register' ? 8 : undefined}
+						autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
+						placeholder={mode === 'register' ? 'at least 8 characters' : '••••••••'}
+						class="border-line bg-ink-2 text-fg focus:border-signal w-full rounded-[var(--radius)] border px-3 py-2 text-sm outline-none"
+					/>
+				</label>
+			{/if}
 
 			{#if error}
 				<p class="text-coral text-xs">{error}</p>
@@ -189,7 +242,13 @@
 				disabled={busy}
 				class="bg-signal/15 text-signal border-signal/40 hover:bg-signal/25 mt-1 w-full rounded-[var(--radius)] border px-4 py-2.5 text-sm font-600 transition-colors disabled:opacity-50"
 			>
-				{busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account'}
+				{busy
+					? 'Working…'
+					: mode === 'login'
+						? 'Sign in'
+						: mode === 'forgot'
+							? 'Send reset link'
+							: 'Create account'}
 			</button>
 		</form>
 
@@ -197,6 +256,10 @@
 			{#if mode === 'register'}
 				Anyone can register. We'll email you a link to confirm your address before your first
 				sign-in.
+			{:else if mode === 'forgot'}
+				Remembered it?
+				<button onclick={() => swap('login')} class="text-signal hover:underline">Back to sign in</button
+				>.
 			{:else}
 				New here?
 				<button onclick={() => swap('register')} class="text-signal hover:underline"

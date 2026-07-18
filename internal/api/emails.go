@@ -51,6 +51,49 @@ This link expires in 24 hours. If you didn't create a Ridgeline account, you can
 	s.mail.SendAsync("verification", user.Email, subject, text, body)
 }
 
+// sendPasswordResetEmail emails a user a link to choose a new password. No-op
+// when the mailer is disabled. Best-effort: send failures are logged, not
+// surfaced to the caller (the endpoint always responds the same to avoid
+// revealing whether the address has an account).
+func (s *Server) sendPasswordResetEmail(user store.User) {
+	if !s.mailEnabled() {
+		return
+	}
+	token, err := s.store.CreatePasswordReset(user.ID)
+	if err != nil {
+		s.log.Error("create password-reset token", "user", user.ID, "err", err)
+		return
+	}
+	link := fmt.Sprintf("%s/reset-password?token=%s", s.mail.BaseURL(), url.QueryEscape(token))
+	name := user.DisplayName
+	if name == "" {
+		name = "there"
+	}
+
+	subject := "Reset your Ridgeline password"
+	text := fmt.Sprintf(`Hi %s,
+
+Someone (hopefully you) asked to reset the password for your Ridgeline account.
+
+Choose a new password here:
+%s
+
+This link expires in 1 hour and can be used once. If you didn't request this, you can ignore this message — your password won't change.
+
+— Ridgeline
+`, name, link)
+
+	body := fmt.Sprintf(`<p>Hi %s,</p>
+<p>Someone (hopefully you) asked to reset the password for your <strong>Ridgeline</strong> account.</p>
+<p>Choose a new password:</p>
+<p><a href="%s" style="display:inline-block;padding:10px 18px;background:#1f9d55;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Reset my password</a></p>
+<p style="color:#666;font-size:13px">Or paste this link into your browser:<br><a href="%s">%s</a></p>
+<p style="color:#666;font-size:13px">This link expires in 1 hour and can be used once. If you didn't request this, you can ignore this message — your password won't change.</p>
+<p>— Ridgeline</p>`, html.EscapeString(name), htmlAttr(link), htmlAttr(link), html.EscapeString(link))
+
+	s.mail.SendAsync("password-reset", user.Email, subject, text, body)
+}
+
 // notifyOwnerOfNote emails a node's verified owner when someone else leaves a
 // public or team note on their node. No-op for private notes, self-notes, unowned
 // nodes, or when email is disabled.

@@ -291,6 +291,11 @@ func runClaimPrune(ctx context.Context, st *store.Store, log *slog.Logger) {
 		} else if n > 0 {
 			log.Info("email-verification prune: removed expired tokens", "rows", n)
 		}
+		if n, err := st.PruneExpiredPasswordResets(); err != nil {
+			log.Warn("password-reset prune", "err", err)
+		} else if n > 0 {
+			log.Info("password-reset prune: removed expired tokens", "rows", n)
+		}
 	}
 	prune()
 	t := time.NewTicker(time.Hour)
