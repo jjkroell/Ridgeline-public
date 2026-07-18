@@ -98,7 +98,7 @@
 		const key = scrubKey.trim().toUpperCase();
 		if (!key) return;
 		if (!/^[0-9A-F]{6,64}$/.test(key)) { msg = 'scrub: enter a hex public key (full key for an exact match).'; return; }
-		if (!(await confirmer.ask({ title: `Scrub node ${key}?`, message: 'Permanently deletes the node and all of its data points. This cannot be undone.', confirmLabel: 'Scrub', danger: true }))) return;
+		if (!(await confirmer.ask({ title: 'Scrub this node?', message: 'Permanently deletes the node and all of its data points. This cannot be undone.', code: key, confirmLabel: 'Scrub', danger: true }))) return;
 		scrubbing = true; msg = '';
 		try {
 			const res = await admin.deleteNodes(auth.csrf, [key]);

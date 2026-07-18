@@ -42,6 +42,11 @@ type Config struct {
 	// Email configures outbound transactional mail (verification + notifications).
 	// When Host is empty, email is disabled and those features degrade gracefully.
 	Email Email `json:"email"`
+	// Environment names this instance's role, surfaced on /api/health. Set it to
+	// "dev" (or "staging") on a non-production box to make the UI show a prominent
+	// "not the live site" banner. Empty (the default) means a normal instance with
+	// no banner — so production instances get nothing unless they opt in.
+	Environment string `json:"environment"`
 }
 
 // Email configures the outbound SMTP relay for transactional mail. For Brevo:
@@ -87,7 +92,10 @@ func Default() Config {
 		Email: Email{
 			Port:     587,
 			FromName: "Ridgeline",
-			BaseURL:  "https://ridgeline.example.com",
+			// No default BaseURL: each instance must set its own public origin.
+			// A hardcoded default here would silently send an instance's links to
+			// that origin whenever the field is omitted. mail.New warns if this is
+			// empty while email is enabled.
 		},
 		MQTT: MQTT{
 			Broker:   "tcp://localhost:1883",

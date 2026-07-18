@@ -296,8 +296,9 @@
 		}
 		if (
 			!(await confirmer.ask({
-				title: `Scrub node ${key}?`,
+				title: 'Scrub this node?',
 				message: 'Permanently deletes the node and all of its stored data points. This cannot be undone.',
+				code: key,
 				confirmLabel: 'Scrub node',
 				danger: true
 			}))

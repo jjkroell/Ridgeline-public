@@ -18,6 +18,9 @@ export type ConfirmOpts = {
 	cancelLabel?: string;
 	/** Style the confirm button as a destructive action. */
 	danger?: boolean;
+	/** Monospace detail shown on its own line below the message — e.g. a public
+	 *  key. Rendered small so a full 64-char key fits one line; scrolls if longer. */
+	code?: string;
 };
 
 type State = ConfirmOpts & {

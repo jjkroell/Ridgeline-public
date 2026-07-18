@@ -4,6 +4,35 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.3.0] — 2026-07-17
+
+### Added
+- Account deletion now opens a prominent confirmation modal that spells out
+  exactly what is removed (account, notes, private locations, shares, sessions)
+  versus what remains (nodes you own are released, not deleted — kept public and
+  marked "previously owned by …"). The delete button activates only after you
+  re-type the account's registered email (case-insensitive) in addition to the
+  password.
+- Config-gated non-production banner: set `environment` (e.g. `"dev"` or
+  `"staging"`) in `config.json` and the UI shows a persistent, obvious "not the
+  live site" banner (using your configured site name). It is reported via
+  `/api/health`; unset (the default) shows nothing, so production instances are
+  unaffected.
+
+### Fixed
+- The claimed-node ownership badge now recolours immediately when a claim
+  verifies or a node is released, instead of only after a full page reload.
+- Long values in confirmation dialogs no longer overflow the modal: dialog
+  title/message wrap, and a public key (e.g. in the "scrub node" prompt) is
+  shown centred in a dedicated one-line monospace slot sized to fit.
+
+### Changed
+- The daemon logs the effective email `baseURL` at startup and warns if it is
+  empty while email is enabled, so a misconfigured link origin is obvious.
+- Removed the hardcoded default email `baseURL`; each instance must set its own
+  public origin in `config.json`. A hardcoded default could silently send an
+  instance's verification links to the wrong origin.
+
 ## [v0.2.1] — 2026-07-17
 
 Hardening follow-up to v0.2.0.

@@ -29,6 +29,18 @@ type Mailer struct {
 func New(cfg config.Email, log *slog.Logger) *Mailer {
 	if !cfg.Enabled() {
 		log.Warn("email disabled: no SMTP relay configured (verification + note emails will be skipped)")
+		return &Mailer{cfg: cfg, log: log}
+	}
+	// Surface the effective link origin at startup. Verification/notification
+	// links are built from baseURL, so a misconfigured value (e.g. a dev box
+	// left pointing at the prod origin) sends users to the wrong instance and
+	// their tokens "don't exist" there. Logging it makes that a glance, not a
+	// mystery — check this line matches the box you're on.
+	base := strings.TrimRight(cfg.BaseURL, "/")
+	if base == "" {
+		log.Warn("email enabled but baseURL is empty — verification/notification links will be broken; set email.baseURL to this instance's public origin")
+	} else {
+		log.Info("email enabled", "relay", cfg.Host, "from", cfg.From, "baseURL", base)
 	}
 	return &Mailer{cfg: cfg, log: log}
 }

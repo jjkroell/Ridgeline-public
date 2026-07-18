@@ -11,6 +11,8 @@
 	import { auth } from '$lib/auth.svelte';
 	import { announce } from '$lib/announce.svelte';
 	import { consent } from '$lib/consent.svelte';
+	import { env } from '$lib/env.svelte';
+	import DevBanner from '$lib/components/DevBanner.svelte';
 	import AnnouncementModal from '$lib/components/AnnouncementModal.svelte';
 	import CookieConsent from '$lib/components/CookieConsent.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -30,6 +32,7 @@
 		live.start();
 		consent.init();
 		announce.init();
+		env.init();
 	});
 
 	type NavItem = {
@@ -262,6 +265,8 @@
 
 	<!-- Main -->
 	<div class="flex min-w-0 flex-1 flex-col">
+		<!-- Non-production banner (self-guards; only on a dev/staging instance). -->
+		<DevBanner />
 		<!-- Mobile top bar -->
 		<header
 			class="border-line bg-ink-2/80 flex items-center gap-4 border-b px-4 py-3 backdrop-blur-sm md:hidden"

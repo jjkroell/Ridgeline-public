@@ -26,6 +26,10 @@
 		try {
 			status = await claims.status(pubkey);
 			error = '';
+			// Keep the global ownership set (drives the claimed badge colour) in sync
+			// with the server's verdict for this node, so a fresh claim/release shows
+			// the right colour immediately instead of only after a page reload.
+			auth.setOwnership(pubkey, !!status.ownedByMe);
 			// Keep polling while there's something to detect live: a pending claim
 			// awaiting its verifying advert, or a just-verified node whose name still
 			// carries the code (waiting for the owner to restore it). Stop otherwise.

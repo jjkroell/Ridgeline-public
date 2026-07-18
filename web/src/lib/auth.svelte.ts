@@ -50,6 +50,18 @@ class Auth {
 		return this.myClaims.has((pubkey ?? '').toUpperCase());
 	}
 
+	/** Reflect a single node's verified-ownership state locally, so the claimed
+	 *  badge (auth.ownsNode) flips the moment a claim verifies or a node is
+	 *  released — without waiting for a page reload to re-run refreshClaims(). */
+	setOwnership(pubkey: string, owned: boolean) {
+		const key = (pubkey ?? '').toUpperCase();
+		if (!key || !this.user || owned === this.myClaims.has(key)) return;
+		const next = new Set(this.myClaims);
+		if (owned) next.add(key);
+		else next.delete(key);
+		this.myClaims = next;
+	}
+
 	/** Clear the "new shares" badge once the user has seen their list. */
 	async markSharesSeen() {
 		if (this.unseenShares === 0 || !this.csrf) return;

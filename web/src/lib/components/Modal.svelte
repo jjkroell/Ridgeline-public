@@ -7,9 +7,16 @@
 	let {
 		onclose,
 		size = 'lg',
+		maxWidth,
 		children
-	}: { onclose: () => void; size?: 'lg' | '2xl'; children: Snippet } = $props();
-	const maxW = $derived(size === '2xl' ? 'md:max-w-2xl' : 'md:max-w-lg');
+	}: {
+		onclose: () => void;
+		size?: 'lg' | '2xl';
+		/** Override the size-derived max-width with an explicit Tailwind class. */
+		maxWidth?: string;
+		children: Snippet;
+	} = $props();
+	const maxW = $derived(maxWidth ?? (size === '2xl' ? 'md:max-w-2xl' : 'md:max-w-lg'));
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />

@@ -32,6 +32,7 @@ type Server struct {
 	store     *store.Store
 	log       *slog.Logger
 	version   string
+	env       string // instance role ("dev"/"staging"/…); surfaced on /api/health
 	webDir    string
 	hub       *hub
 	up        websocket.Upgrader
@@ -57,6 +58,10 @@ func (s *Server) SetAnalytics(e *analytics.Engine) { s.analytics = e }
 // SetMailer attaches the outbound mailer. When nil or disabled, email features
 // (verification, note notifications) degrade to no-ops.
 func (s *Server) SetMailer(m mailSender) { s.mail = m }
+
+// SetEnvironment records this instance's role (e.g. "dev"), reported by
+// /api/health so the UI can show a non-production banner. Empty = no banner.
+func (s *Server) SetEnvironment(env string) { s.env = env }
 
 // mailEnabled reports whether outbound email is configured.
 func (s *Server) mailEnabled() bool { return s.mail != nil && s.mail.Enabled() }
@@ -285,7 +290,11 @@ func (s *Server) Broadcast(o store.Observation) {
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, map[string]string{"status": "ok", "version": s.version})
+	h := map[string]string{"status": "ok", "version": s.version}
+	if s.env != "" {
+		h["environment"] = s.env
+	}
+	writeJSON(w, h)
 }
 
 func (s *Server) stats(w http.ResponseWriter, _ *http.Request) {

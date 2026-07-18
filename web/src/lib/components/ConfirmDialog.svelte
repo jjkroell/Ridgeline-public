@@ -8,11 +8,24 @@
 </script>
 
 {#if s.open}
-	<Modal onclose={() => confirmer.cancel()}>
+	<Modal onclose={() => confirmer.cancel()} maxWidth={s.code ? 'md:max-w-[34rem]' : undefined}>
 		<div class="px-6 py-5">
-			<h2 class="font-display text-fg text-lg font-700">{s.title}</h2>
+			<h2 class="font-display text-fg text-lg font-700 break-words">{s.title}</h2>
 			{#if s.message}
-				<p class="text-fg-dim mt-2 text-sm leading-relaxed whitespace-pre-line">{s.message}</p>
+				<p class="text-fg-dim mt-2 text-sm leading-relaxed break-words whitespace-pre-line">
+					{s.message}
+				</p>
+			{/if}
+			{#if s.code}
+				<div
+					class="border-line/70 bg-ink-2/60 mt-3 overflow-x-auto rounded-[var(--radius)] border px-3 py-2 text-center"
+				>
+					<code
+						class="font-mono {s.danger
+							? 'text-coral'
+							: 'text-signal'} text-[0.6875rem] leading-relaxed whitespace-nowrap">{s.code}</code
+					>
+				</div>
 			{/if}
 		</div>
 		<div class="border-line/70 flex items-center justify-end gap-3 border-t px-6 py-4">

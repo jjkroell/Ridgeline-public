@@ -98,6 +98,7 @@ func run(log *slog.Logger, configPath string) error {
 	}
 
 	apiServer := api.New(st, log, version, cfg.WebDir)
+	apiServer.SetEnvironment(cfg.Environment)
 
 	// Outbound transactional email (verification + note notifications). Disabled
 	// gracefully when no relay is configured.

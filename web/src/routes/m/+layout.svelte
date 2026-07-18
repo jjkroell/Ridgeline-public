@@ -6,6 +6,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import PwaInstall from '$lib/components/PwaInstall.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import DevBanner from '$lib/components/DevBanner.svelte';
 
 	let { children } = $props();
 
@@ -87,6 +88,8 @@
 </script>
 
 <div class="bg-ink text-fg fixed inset-0 flex flex-col overflow-hidden">
+	<!-- Non-production banner (self-guards; only on a dev/staging instance). -->
+	<DevBanner />
 	<!-- App bar -->
 	<header
 		class="border-line/70 bg-ink-2/85 z-20 flex shrink-0 items-center gap-3 border-b px-4 backdrop-blur-md"
