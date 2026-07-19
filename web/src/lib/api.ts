@@ -339,6 +339,21 @@ export interface ForeignNode {
 	captive?: boolean; // transitPct >= 95% (no alternative route)
 }
 export interface BridgeCandidate {
+	/** How the relay behaves physically, from all payload types. RF is broadcast so
+	 *  the next hop varies (median relay: 13 distinct, 44% top share); a relay whose
+	 *  egress is a wire has exactly one, forever. */
+	pathVolume: number;
+	nextHops: number;
+	nextHopTopShare: number;
+	/** Share of carried packets where this relay was the LAST hop — where an
+	 *  observer received its own transmission. Zero over real volume means it
+	 *  transmits where nothing is listening. Shown, not ranked on. */
+	terminalShare: number;
+	/** Which rule produced this candidate: "captivity" (a population with no
+	 *  alternative route in), "wired" (an egress that never varies), or both. */
+	signals: string[];
+	/** Operator has sanctioned this bridge: still reported, but not a finding. */
+	known?: boolean;
 	nodeKey: string;
 	name: string;
 	captiveCount: number; // foreign nodes ≥95% captive to this node
@@ -354,8 +369,34 @@ export interface InjectorCandidate {
 }
 export interface InjectionReport {
 	windowHours: number;
+	/** Adverts decoded in the window, and how many were dropped because their
+	 *  Ed25519 signature didn't verify (a corrupt key invents a node that never
+	 *  existed). Shown so a quiet result reads as "clean data", not "broken scan". */
+	advertsScanned: number;
+	advertsRejected: number;
+	/** Every decoded packet, those carrying at least one hop, and hops whose hash
+	 *  prefix matched no single node. Path evidence comes from all payload types,
+	 *  not just adverts. */
+	packetsScanned: number;
+	pathsScanned: number;
+	unresolvedHops: number;
 	bridges: BridgeCandidate[];
 	injectors: InjectorCandidate[];
+	migrations: MigrationEvent[];
+}
+
+/** A node that stopped being heard directly while its traffic kept arriving
+ *  relayed. The pubkey is unchanged, so nothing else notices it moved. */
+export interface MigrationEvent {
+	key: string;
+	name: string;
+	role?: string;
+	lastDirectAt: string;
+	lastRelayAt: string;
+	relayedAfter: number;
+	/** Set when a bridge carries its traffic — the difference between "moved
+	 *  behind a bridge" and "drifted out of earshot". */
+	viaBridge?: string;
 }
 export interface BlockEntry {
 	kind: string; // observer | bridge | node

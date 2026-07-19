@@ -4,6 +4,50 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.5.0] — 2026-07-19
+
+RF bridge detection, rebuilt. The previous detector could not find a live bridge
+on the mesh it was written for; this release finds it, explains why it was
+missed, and keeps a bridge you run on purpose from being reported as news
+forever. Design notes and the evidence behind it are in
+[docs/bridge-detection.md](docs/bridge-detection.md).
+
+### Added
+- **A second detection signal: wired egress.** RF is broadcast, so which
+  neighbour relays a packet next varies — a typical relay hands off to ~13
+  different nodes. A relay whose next hop *never* varies is handing off over a
+  cable. This finds a bridge however few nodes sit behind it; the old rule needed
+  three and could not see a small far side at all. Both rules now run and every
+  candidate is labelled with the signal(s) that produced it.
+- **Moved behind a bridge.** Nodes that stopped being heard directly and now
+  arrive through a bridge are reported in their own right. A node keeps its
+  public key across a frequency change, so nothing else notices it moved.
+- **Known bridges.** Mark a bridge you run on purpose: it moves to its own list
+  and stops appearing as a candidate. Nothing is blocked or hidden — the
+  opposite of Dismiss, which says a candidate is not a bridge.
+- **Scan summary and per-candidate evidence** in the admin console: packets
+  scanned, paths, unresolved hops, adverts rejected, and for each candidate the
+  traffic it carried, how many distinct next hops it had, and whether an observer
+  ever received its own transmission.
+
+### Fixed
+- **Path evidence now comes from every packet type, not just adverts.** A route
+  is in the clear whatever the payload; only the *origin* needs an advert. A
+  companion that never adverts previously contributed nothing at all despite its
+  messages crossing a bridge with a full path attached — on the reference mesh
+  this raised the evidence base from 1,699 adverts to 5,667 packets per window.
+- **Side membership is judged on recent evidence.** A single direct reception
+  anywhere in the window used to mark a node local for the whole window, so a
+  node that moved kept being excused by evidence that had expired hours earlier.
+- **Adverts whose signature does not verify are rejected.** A corrupt public key
+  invents a node that never existed; those phantoms were surfacing as injector
+  candidates.
+- **Ordinary repeaters no longer flagged as bridges.** A single unvarying next
+  hop is also what a repeater with exactly one reachable neighbour looks like;
+  a candidate must now actually carry a far side.
+- **Admin console** only renders sections that hold something, and the Known
+  action is no longer adjacent to the show/hide toggle.
+
 ## [v0.4.0] — 2026-07-19
 
 ### Added

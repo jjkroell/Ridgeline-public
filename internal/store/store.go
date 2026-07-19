@@ -228,6 +228,7 @@ type Store struct {
 	blockedNodes     map[string]bool // node/bridge pubkey (UPPER) — origin-advert block
 	blockedBridges   []string        // bridge pubkeys (UPPER) — path-prefix block
 	allowedNodes     map[string]bool // node pubkey (UPPER) — dismissed detection candidates
+	knownBridges     map[string]bool // node pubkey (UPPER) — sanctioned bridges, labelled not hidden
 
 	// Set of node pubkeys (UPPER) with an open pending ownership claim. Consulted
 	// on the hot ingest path so the advert verifier only touches the DB for nodes

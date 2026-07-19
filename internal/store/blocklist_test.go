@@ -248,3 +248,35 @@ func TestScrubNodesRefreshesPendingClaimCache(t *testing.T) {
 		t.Error("scrubbed node still reported as having a pending claim")
 	}
 }
+
+// TestKnownBridgeIsNotBlocked covers the sanctioned-bridge registry. Marking a
+// bridge known asserts that it IS a bridge and is wanted — the opposite of
+// "allow", which asserts a candidate is not one. Neither may affect ingest: a
+// known bridge's traffic is exactly the traffic the operator wants to keep.
+func TestKnownBridgeIsNotBlocked(t *testing.T) {
+	st := testStore(t)
+	bridge := "0485454C383E00112233445566778899AABBCCDDEEFF00112233445566778899"
+
+	if err := st.AddBlock(BlockKnown, bridge, "Bridge (far half)", "operator's own bridge"); err != nil {
+		t.Fatalf("mark known: %v", err)
+	}
+	if st.ShouldDrop(advertPkt(bridge), "obs-a") {
+		t.Error("a known bridge's own adverts must not be dropped at ingest")
+	}
+	if st.ShouldDrop(advertPkt("AABBCC00112233445566778899AABBCCDDEEFF00112233445566778899AABBCC", "0485"), "obs-a") {
+		t.Error("traffic relayed by a known bridge must not be dropped at ingest")
+	}
+	if st.IsNodeBlocked(bridge) {
+		t.Error("a known bridge must not be hidden from the API")
+	}
+	if k := st.KnownBridges(); !k[bridge] {
+		t.Errorf("KnownBridges did not report the marked bridge: %v", k)
+	}
+	// Unmarking removes it from the registry without touching anything else.
+	if err := st.RemoveBlock(BlockKnown, bridge); err != nil {
+		t.Fatalf("unmark: %v", err)
+	}
+	if k := st.KnownBridges(); k[bridge] {
+		t.Error("KnownBridges still reports the bridge after unmarking")
+	}
+}

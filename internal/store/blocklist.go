@@ -13,12 +13,18 @@ const (
 	BlockBridge   = "bridge"   // RF bridge node (pubkey) — drops anything it relays
 	BlockNode     = "node"     // a single injected node (pubkey) — drops its own adverts
 	BlockAllow    = "allow"    // dismissed candidate (pubkey) — excluded from detection, NOT blocked
+	// BlockKnown marks a SANCTIONED bridge (pubkey): a real bridge the operator
+	// runs on purpose. Nothing is blocked and nothing is hidden — unlike "allow",
+	// which asserts a candidate is not a bridge, this asserts it is one and that
+	// it is wanted. Detection still reports it, labelled, so it stops reading as
+	// a finding that needs acting on every single scan.
+	BlockKnown = "known"
 )
 
 // pubkeyKind reports whether a block kind's key is a node pubkey (so it should be
 // stored/compared upper-cased) rather than a free-form observer id.
 func pubkeyKind(kind string) bool {
-	return kind == BlockNode || kind == BlockBridge || kind == BlockAllow
+	return kind == BlockNode || kind == BlockBridge || kind == BlockAllow || kind == BlockKnown
 }
 
 // BlockEntry is one blocklist row.
@@ -40,6 +46,7 @@ func (s *Store) loadBlocklist() error {
 	obs := map[string]bool{}
 	nodes := map[string]bool{}
 	allow := map[string]bool{}
+	known := map[string]bool{}
 	var bridges []string
 	for rows.Next() {
 		var kind, key string
@@ -57,6 +64,8 @@ func (s *Store) loadBlocklist() error {
 			nodes[strings.ToUpper(key)] = true
 		case BlockAllow:
 			allow[strings.ToUpper(key)] = true
+		case BlockKnown:
+			known[strings.ToUpper(key)] = true
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -64,6 +73,7 @@ func (s *Store) loadBlocklist() error {
 	}
 	s.blockMu.Lock()
 	s.blockedObservers, s.blockedNodes, s.blockedBridges, s.allowedNodes = obs, nodes, bridges, allow
+	s.knownBridges = known
 	s.blockMu.Unlock()
 	return nil
 }
@@ -365,4 +375,17 @@ func pathHitsBridge(path []string, bridges []string) bool {
 		}
 	}
 	return false
+}
+
+// KnownBridges returns the set of pubkeys (uppercase) an operator has marked as
+// sanctioned bridges. Detection labels these rather than hiding them: the bridge
+// is real and should still be visible, it just isn't news.
+func (s *Store) KnownBridges() map[string]bool {
+	s.blockMu.RLock()
+	defer s.blockMu.RUnlock()
+	out := make(map[string]bool, len(s.knownBridges))
+	for k := range s.knownBridges {
+		out[k] = true
+	}
+	return out
 }

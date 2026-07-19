@@ -65,7 +65,12 @@ A single web app with, among other things:
 - **Accounts** — optional email-verified logins, node claiming, notes, private
   locations, and sharing (see [below](#accounts--node-ownership)).
 - **Mobile PWA** — an installable phone app served at `/m` with its own chrome.
-- **Admin console** — token-protected management at `/admin`.
+- **Admin console** — management at `/admin`, including RF bridge detection: it
+  looks for relays carrying traffic in from a mesh on another frequency, either
+  because a population of nodes has no other route in or because a relay's next
+  hop never varies (a cable, not an antenna). Bridges you run on purpose can be
+  marked known so they stop being reported as findings. See
+  [docs/bridge-detection.md](docs/bridge-detection.md).
 - **Light/dark theme**, and a WebGL-free fallback map for browsers without it.
 
 ## How it works

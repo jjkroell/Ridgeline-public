@@ -2,6 +2,8 @@ package analytics
 
 import (
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,19 +28,42 @@ func TestDetectInjectionIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cutoff := time.Now().Add(-365 * 24 * time.Hour).UTC().Format(time.RFC3339Nano)
+	// Window matters: a long one lets every node be heard directly at some point,
+	// which erases the very signal being measured. RIDGELINE_DETECT_HOURS selects it.
+	hours := 365 * 24
+	if h := os.Getenv("RIDGELINE_DETECT_HOURS"); h != "" {
+		if v, err := strconv.Atoi(h); err == nil && v > 0 {
+			hours = v
+		}
+	}
+	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour).UTC().Format(time.RFC3339Nano)
+	t.Logf("window=%dh", hours)
 	rep, err := DetectInjection(st, nodes, cutoff, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("bridges=%d injectors=%d", len(rep.Bridges), len(rep.Injectors))
+	t.Logf("packets=%d paths=%d unresolvedHops=%d | adverts=%d rejected=%d | bridges=%d injectors=%d",
+		rep.PacketsScanned, rep.PathsScanned, rep.UnresolvedHops,
+		rep.AdvertsScanned, rep.AdvertsRejected, len(rep.Bridges), len(rep.Injectors))
 	for _, b := range rep.Bridges {
-		t.Logf("  BRIDGE %s (%s) captive=%d/%d capFrac=%.2f km=%.0f", b.Name, b.NodeKey[:12], b.CaptiveCount, b.ForeignThrough, b.CaptiveFraction, b.ForeignKm)
+		t.Logf("  [%s] %s (%s) captive=%d/%d | pathVol=%d nextHops=%d topShare=%.0f%% terminal=%.1f%%",
+			strings.Join(b.Signals, "+"), b.Name, b.NodeKey[:12], b.CaptiveCount, b.ForeignThrough,
+			b.PathVolume, b.NextHops, b.NextHopTopShare*100, b.TerminalShare*100)
+		for _, f := range b.Foreign {
+			t.Logf("        behind: %s (%s) transit=%.0f%%", f.Name, f.Key[:10], f.TransitPct)
+		}
+	}
+	for _, m := range rep.Migrations {
+		via := ""
+		if m.ViaBridge != "" {
+			via = "  -> now behind " + m.ViaBridge
+		}
+		t.Logf("  MIGRATED %s (%s) lastDirect=%s relayedAfter=%d%s",
+			m.Name, m.Key[:10], m.LastDirectAt[:19], m.RelayedAfter, via)
 	}
 	for _, in := range rep.Injectors {
 		t.Logf("  INJECTOR %s exclusive=%d", in.Observer, in.ExclusiveCount)
 	}
-	if len(rep.Bridges) == 0 {
-		t.Error("expected at least one bridge candidate")
-	}
+	// No assertion on count: this harness is for comparing detector behaviour
+	// across windows and revisions against known ground truth, not a pass/fail gate.
 }

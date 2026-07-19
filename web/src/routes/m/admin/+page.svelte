@@ -48,8 +48,15 @@
 
 	const isBlocked = (kind: string, key: string) => blocks.some((b) => b.kind === kind && b.key.toUpperCase() === key.toUpperCase());
 	const isAllowed = (key: string) => blocks.some((b) => b.kind === 'allow' && b.key.toUpperCase() === key.toUpperCase());
-	const visibleBridges = $derived((report?.bridges ?? []).filter((b) => !isAllowed(b.nodeKey)));
-	const quarantineEntries = $derived(blocks.filter((b) => b.reason !== 'purged'));
+	// Dismissed isn't a bridge; known is already decided. Both leave the candidate
+	// list — known bridges keep their own section below.
+	const visibleBridges = $derived(
+		(report?.bridges ?? []).filter((b) => !isAllowed(b.nodeKey) && !b.known && !isKnown(b.nodeKey))
+	);
+	const isKnown = (key: string) => blocks.some((b) => b.kind === 'known' && b.key.toUpperCase() === key.toUpperCase());
+	// A sanctioned bridge is not quarantined — it gets its own list.
+	const knownEntries = $derived(blocks.filter((b) => b.kind === 'known'));
+	const quarantineEntries = $derived(blocks.filter((b) => b.reason !== 'purged' && b.kind !== 'known'));
 	const purgedEntries = $derived(blocks.filter((b) => b.reason === 'purged'));
 
 	async function quarantineBridge(b: BridgeCandidate) {
@@ -60,6 +67,11 @@
 			await refreshBlocks();
 			msg = `Quarantined ${b.name} + ${captive.length} captive nodes.`;
 		} catch (e) { msg = `quarantine: ${(e as Error).message}`; } finally { busy = ''; }
+	}
+	async function markKnown(b: BridgeCandidate) {
+		busy = b.nodeKey; msg = '';
+		try { await admin.block(auth.csrf, { kind: 'known', key: b.nodeKey, name: b.name, reason: 'known bridge' }); await refreshBlocks(); msg = `${b.name} marked as a known bridge.`; }
+		catch (e) { msg = `mark known: ${(e as Error).message}`; } finally { busy = ''; }
 	}
 	async function dismissBridge(b: BridgeCandidate) {
 		busy = b.nodeKey; msg = '';
@@ -144,12 +156,23 @@
 		</div>
 
 		{#if report}
+			<div class="border-line/60 bg-panel mb-3 rounded-2xl border px-4 py-3">
+				<div class="label normal-case text-fg-faint mb-1">Scan</div>
+				<div class="font-mono text-fg-dim text-[0.68rem]">
+					{report.packetsScanned.toLocaleString()} packets · {report.advertsScanned.toLocaleString()} adverts / {report.windowHours.toFixed(0)}h
+					{#if report.advertsRejected > 0}
+						· <span class="text-amber">{report.advertsRejected.toLocaleString()} rejected (bad signature)</span>
+					{:else}
+						· all signatures verified
+					{/if}
+				</div>
+			</div>
+
 			<!-- bridges -->
+			{#if visibleBridges.length > 0}
 			<h2 class="font-display text-fg mb-2 px-1 text-xs font-700 tracking-wide">RF BRIDGE CANDIDATES · {visibleBridges.length}</h2>
 			<div class="flex flex-col gap-2">
-				{#if visibleBridges.length === 0}
-					<div class="border-line/60 bg-panel text-fg-faint rounded-2xl border px-4 py-6 text-center text-sm">No RF bridge signature in this window.</div>
-				{:else}
+				{#if true}
 					{#each visibleBridges as b (b.nodeKey)}
 						<div class="border-line/60 bg-panel rounded-2xl border p-3.5">
 							<div class="flex items-center gap-2">
@@ -157,7 +180,20 @@
 								<a href="/m/nodes/{b.nodeKey}" class="text-fg min-w-0 flex-1 truncate text-sm font-600">{b.name}</a>
 							</div>
 							<div class="text-fg-faint mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.62rem]">
-								<span class="text-coral">{b.captiveCount}/{b.foreignThrough} captive</span>
+								{#each b.signals as sig (sig)}
+										<span class={sig === 'wired' ? 'text-amber' : 'text-coral'}>{sig}</span>
+									{/each}
+									{#if b.foreignThrough > 0}
+										<span class="text-coral">{b.captiveCount}/{b.foreignThrough} captive</span>
+									{/if}
+									{#if b.pathVolume > 0}
+										<span class={b.nextHops === 1 && b.pathVolume >= 200 ? 'text-amber' : ''}
+											>{b.nextHops} next hop{b.nextHops === 1 ? '' : 's'}</span
+										>
+										{#if b.terminalShare === 0}
+											<span class="text-amber">never terminal</span>
+										{/if}
+									{/if}
 								<span>{(b.captiveFraction * 100).toFixed(0)}% of foreign</span>
 								{#if b.foreignKm > 5}<span>{b.foreignKm.toFixed(0)} km</span>{/if}
 								<button onclick={() => (expanded[b.nodeKey] = !expanded[b.nodeKey])} class="active:text-signal underline">{expanded[b.nodeKey] ? 'hide' : 'show'} nodes</button>
@@ -176,6 +212,7 @@
 								{#if isBlocked('bridge', b.nodeKey)}
 									<span class="text-amber self-center text-xs">quarantined</span>
 								{:else}
+									<button onclick={() => markKnown(b)} disabled={busy === b.nodeKey} class="border-signal/40 text-signal flex-1 rounded-xl border py-2 text-xs font-600 disabled:opacity-50">Known</button>
 									<button onclick={() => dismissBridge(b)} disabled={busy === b.nodeKey} class="border-line text-fg-dim flex-1 rounded-xl border py-2 text-xs font-600 disabled:opacity-50">Dismiss</button>
 									<button onclick={() => quarantineBridge(b)} disabled={busy === b.nodeKey} class="border-amber/40 text-amber flex-1 rounded-xl border py-2 text-xs font-600 disabled:opacity-50">Quarantine</button>
 								{/if}
@@ -185,13 +222,15 @@
 					{/each}
 				{/if}
 			</div>
+			{/if}
+
+			
 
 			<!-- injectors -->
+			{#if (report.injectors?.length ?? 0) > 0}
 			<h2 class="font-display text-fg mt-5 mb-2 px-1 text-xs font-700 tracking-wide">MQTT INJECTORS · {report.injectors?.length ?? 0}</h2>
 			<div class="flex flex-col gap-2">
-				{#if (report.injectors?.length ?? 0) === 0}
-					<div class="border-line/60 bg-panel text-fg-faint rounded-2xl border px-4 py-6 text-center text-sm">No rogue publisher in this window.</div>
-				{:else}
+				{#if true}
 					{#each report.injectors as i (i.observer)}
 						<div class="border-line/60 bg-panel rounded-2xl border p-3.5">
 							<div class="flex items-center gap-2">
@@ -213,12 +252,45 @@
 			</div>
 		{/if}
 
+		
+		{/if}
+
 		<!-- quarantine list -->
+		{#if report && report.migrations.length > 0}
+			<h2 class="font-display text-fg mt-5 mb-2 px-1 text-xs font-700 tracking-wide">MOVED BEHIND A BRIDGE · {report.migrations.length}</h2>
+			<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
+				{#each report.migrations as m (m.key)}
+					<div class="px-4 py-2.5">
+						<a href="/m/nodes/{m.key}" class="text-fg text-sm font-600">{m.name}</a>
+						{#if m.viaBridge}
+							<span class="text-amber ml-1 text-[0.62rem]">now behind {m.viaBridge}</span>
+						{/if}
+						<div class="text-fg-faint font-mono text-[0.62rem]">{m.relayedAfter} relayed since it stopped being heard directly</div>
+					</div>
+				{/each}
+			</div>
+			{/if}
+
+		
+		{/if}
+
+		{#if knownEntries.length > 0}
+			<h2 class="font-display text-fg mt-5 mb-2 px-1 text-xs font-700 tracking-wide">KNOWN BRIDGES · {knownEntries.length}</h2>
+			<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
+				{#each knownEntries as b (b.kind + b.key)}
+					<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
+						<span class="label text-signal !text-[0.55rem]">known</span>
+						<a href="/m/nodes/{b.key}" class="text-fg min-w-0 flex-1 truncate">{b.name || b.key.slice(0, 14)}</a>
+						<button onclick={() => removeBlock(b)} disabled={busy === b.kind + b.key} class="text-fg-faint active:text-signal text-xs disabled:opacity-50">unmark</button>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+		{#if quarantineEntries.length > 0}
 		<h2 class="font-display text-fg mt-5 mb-2 px-1 text-xs font-700 tracking-wide">QUARANTINE LIST · {quarantineEntries.length}</h2>
 		<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
-			{#if quarantineEntries.length === 0}
-				<div class="text-fg-faint px-4 py-6 text-center text-sm">Nothing quarantined.</div>
-			{:else}
+			{#if true}
 				{#each quarantineEntries as b (b.kind + b.key)}
 					<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
 						<span class="label !text-[0.55rem]" style="color:{kindColor[b.kind]}">{kindLabel(b.kind)}</span>

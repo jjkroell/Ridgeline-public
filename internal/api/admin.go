@@ -42,7 +42,7 @@ func (s *Server) adminBlocklist(w http.ResponseWriter, _ *http.Request, _ store.
 
 // blockReq is the body for POST /api/admin/block (quarantine, reversible).
 type blockReq struct {
-	Kind   string `json:"kind"` // observer | bridge | node | allow
+	Kind   string `json:"kind"` // observer | bridge | node | allow | known
 	Key    string `json:"key"`
 	Name   string `json:"name"`
 	Reason string `json:"reason"`
@@ -58,7 +58,7 @@ func (s *Server) adminBlock(w http.ResponseWriter, r *http.Request, _ store.User
 		return
 	}
 	if !validKind(req.Kind) || req.Key == "" {
-		writeErr(w, http.StatusBadRequest, "kind must be observer|bridge|node|allow and key required")
+		writeErr(w, http.StatusBadRequest, "kind must be observer|bridge|node|allow|known and key required")
 		return
 	}
 	if err := s.store.AddBlock(req.Kind, req.Key, req.Name, req.Reason); err != nil {
@@ -178,7 +178,7 @@ func (s *Server) adminDelete(w http.ResponseWriter, r *http.Request, _ store.Use
 }
 
 func validKind(k string) bool {
-	return k == "observer" || k == "bridge" || k == "node" || k == "allow"
+	return k == "observer" || k == "bridge" || k == "node" || k == "allow" || k == store.BlockKnown
 }
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
