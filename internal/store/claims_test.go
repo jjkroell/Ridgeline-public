@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -183,5 +184,73 @@ func TestClaimVerifyIgnoredWhenAlreadyOwned(t *testing.T) {
 	owner, _, _ := st.NodeOwner(claimNode)
 	if owner.UserID != a.ID {
 		t.Errorf("owner should still be A, got user %d", owner.UserID)
+	}
+}
+
+// TestListUserClaimsNodePresent covers the dormant-claim signal: a claim outlives
+// its node row when the retention sweep prunes a node that went silent, and the
+// UI needs to tell that apart from a node that is present but unnamed.
+func TestListUserClaimsNodePresent(t *testing.T) {
+	st := testStore(t)
+	st.CreateUser("owner@example.com", "h", "Owner")
+	u, _ := st.CreateUser("claimer@example.com", "h", "Claimer")
+
+	present := "1111111111111111111111111111111111111111111111111111111111111111"
+	absent := "2222222222222222222222222222222222222222222222222222222222222222"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	// A present but UNNAMED node — must still report as present.
+	st.db.Exec(`INSERT INTO nodes(pubkey,name,role,first_seen,last_seen,advert_count,advert_tx_count,hash_size)
+		VALUES(?,'','',?,?,0,0,0)`, present, now, now)
+	for _, k := range []string{present, absent} {
+		if _, err := st.CreateVerifiedClaim(k, u.ID); err != nil {
+			t.Fatalf("claim %s: %v", k[:4], err)
+		}
+	}
+
+	got := map[string]bool{}
+	cs, err := st.ListUserClaims(u.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, c := range cs {
+		got[c.NodePubkey] = c.NodePresent
+	}
+	if !got[present] {
+		t.Error("unnamed but present node must report nodePresent=true")
+	}
+	if got[absent] {
+		t.Error("pruned node must report nodePresent=false")
+	}
+}
+
+// TestPartitionClaimed guards the rule that keeps heuristic sweeps (artifact
+// scrub, bridge purge) from deleting a node someone has proved they own.
+func TestPartitionClaimed(t *testing.T) {
+	st := testStore(t)
+	st.CreateUser("owner@example.com", "h", "Owner")
+	u, _ := st.CreateUser("claimer@example.com", "h", "Claimer")
+
+	verified := "7777777777777777777777777777777777777777777777777777777777777777"
+	pending := "8888888888888888888888888888888888888888888888888888888888888888"
+	free := "9999999999999999999999999999999999999999999999999999999999999999"
+	if _, err := st.CreateVerifiedClaim(verified, u.ID); err != nil {
+		t.Fatalf("verified claim: %v", err)
+	}
+	if _, err := st.CreateOrRefreshClaim(pending, u.ID, "K7X4QP", 30*time.Minute); err != nil {
+		t.Fatalf("pending claim: %v", err)
+	}
+
+	// Lowercase input must still match — callers pass keys straight from detectors.
+	unclaimed, claimed, err := st.PartitionClaimed([]string{
+		strings.ToLower(verified), pending, free,
+	})
+	if err != nil {
+		t.Fatalf("partition: %v", err)
+	}
+	if len(unclaimed) != 1 || unclaimed[0] != free {
+		t.Errorf("unclaimed = %v, want just the free key", unclaimed)
+	}
+	if len(claimed) != 2 {
+		t.Errorf("claimed = %v, want both the verified and pending keys", claimed)
 	}
 }

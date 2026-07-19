@@ -4,14 +4,13 @@
 	import { confirmer } from '$lib/confirm.svelte';
 	import {
 		admin,
-		adminUsers,
 		type InjectionReport,
 		type BlockEntry,
 		type BridgeCandidate,
-		type InjectorCandidate,
-		type AuthUser
+		type InjectorCandidate
 	} from '$lib/api';
-	import { ago, roleColor, roleLabel } from '$lib/format';
+	import { ago, purgeCascade, roleColor, roleLabel, skippedNote } from '$lib/format';
+	import MembersPanel from '$lib/components/MembersPanel.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import WindowToggle from '$lib/components/WindowToggle.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
@@ -45,66 +44,6 @@
 	let scrubKey = $state('');
 	let scrubbing = $state(false);
 
-	// --- Member management (moved here from the account page) ---
-	let members = $state<AuthUser[]>([]);
-	let loadingMembers = $state(false);
-	let membersError = $state('');
-	let memberBusyId = $state<number | null>(null);
-	let confirmDeleteId = $state<number | null>(null);
-
-	async function loadMembers() {
-		if (!auth.isAdmin) return;
-		loadingMembers = true;
-		membersError = '';
-		try {
-			members = await adminUsers.list();
-		} catch (e) {
-			membersError = String((e as Error).message ?? e);
-		} finally {
-			loadingMembers = false;
-		}
-	}
-
-	async function setMemberAdmin(u: AuthUser, isAdmin: boolean) {
-		memberBusyId = u.id;
-		membersError = '';
-		try {
-			await adminUsers.setAdmin(auth.csrf, u.id, isAdmin);
-			await loadMembers();
-		} catch (e) {
-			membersError = String((e as Error).message ?? e);
-		} finally {
-			memberBusyId = null;
-		}
-	}
-
-	async function setMemberBlocked(u: AuthUser, blocked: boolean) {
-		memberBusyId = u.id;
-		membersError = '';
-		try {
-			await adminUsers.setBlocked(auth.csrf, u.id, blocked);
-			await loadMembers();
-		} catch (e) {
-			membersError = String((e as Error).message ?? e);
-		} finally {
-			memberBusyId = null;
-		}
-	}
-
-	async function removeMember(u: AuthUser) {
-		memberBusyId = u.id;
-		membersError = '';
-		try {
-			await adminUsers.remove(auth.csrf, u.id);
-			confirmDeleteId = null;
-			await loadMembers();
-		} catch (e) {
-			membersError = String((e as Error).message ?? e);
-		} finally {
-			memberBusyId = null;
-		}
-	}
-
 	// Kick off the initial load exactly once, when admin status is confirmed
 	// (auth.isAdmin flips false→true after the /me probe). The `loaded` guard is
 	// essential: gating on blocks.length would loop forever when the blocklist is
@@ -114,7 +53,6 @@
 		if (auth.isAdmin && !loaded) {
 			loaded = true;
 			refreshBlocks();
-			loadMembers();
 		}
 	});
 
@@ -201,7 +139,9 @@
 			const res = await admin.purge(auth.csrf, { bridges: [b.nodeKey], nodes: captive });
 			await refreshBlocks();
 			report = null;
-			msg = `Purged ${b.name}: deleted ${res.observations} observations and ${res.nodes} node rows.`;
+			msg =
+				`Purged ${b.name}: deleted ${res.observations} observations and ${res.nodes} node rows.` +
+				skippedNote(res);
 		} catch (e) {
 			msg = `purge: ${(e as Error).message}`;
 		} finally {
@@ -239,7 +179,9 @@
 			const res = await admin.purge(auth.csrf, { observers: [i.observer], nodes: i.exclusive.map((f) => f.key) });
 			await refreshBlocks();
 			report = null;
-			msg = `Purged ${i.observer}: deleted ${res.observations} observations and ${res.nodes} node rows.`;
+			msg =
+				`Purged ${i.observer}: deleted ${res.observations} observations and ${res.nodes} node rows.` +
+				skippedNote(res);
 		} catch (e) {
 			msg = `purge: ${(e as Error).message}`;
 		} finally {
@@ -297,7 +239,8 @@
 		if (
 			!(await confirmer.ask({
 				title: 'Scrub this node?',
-				message: 'Permanently deletes the node and all of its stored data points. This cannot be undone.',
+				message:
+					'Permanently deletes the node, all of its stored data points, and any ownership claim, notes, private location and location shares attached to it. This cannot be undone.',
 				code: key,
 				confirmLabel: 'Scrub node',
 				danger: true
@@ -308,10 +251,15 @@
 		msg = '';
 		try {
 			const res = await admin.deleteNodes(auth.csrf, [key]);
+			const cascaded = purgeCascade(res);
+			// No node row but leftover user data = a ghost from a pre-cascade scrub,
+			// which is a successful cleanup, not a mistyped key.
 			msg =
 				res.nodes > 0
-					? `Scrubbed ${key}: removed ${res.nodes} node row + ${res.observations} data points.`
-					: `No node row matched ${key} (removed ${res.observations} data points). Check the key — deletion needs the full public key.`;
+					? `Scrubbed ${key}: removed ${res.nodes} node row + ${res.observations} data points${cascaded ? ` + ${cascaded}` : ''}.`
+					: cascaded
+						? `No node row matched ${key}, but cleaned up ${cascaded} left over from an earlier scrub.`
+						: `No node row matched ${key} (removed ${res.observations} data points). Check the key — deletion needs the full public key.`;
 			scrubKey = '';
 			await refreshBlocks();
 		} catch (e) {
@@ -366,8 +314,9 @@
 		<div class="panel mt-4 px-5 py-4">
 			<div class="label normal-case text-fg-faint mb-1">Scrub node by key</div>
 			<p class="text-fg-faint mb-3 text-xs">
-				Permanently delete a node and all of its stored data points (its adverts + node row). Paste the
-				full public key. Irreversible; the node re-appears if it transmits again.
+				Permanently delete a node and all of its stored data points (its adverts + node row), along
+				with any ownership claim, notes, private location and location shares attached to it. Paste
+				the full public key. Irreversible; the node re-appears if it transmits again.
 			</p>
 			<form
 				class="flex flex-wrap items-center gap-2"
@@ -581,83 +530,6 @@
 			</section>
 		{/if}
 
-		<!-- Members -->
-		<section class="panel rise mt-6 overflow-hidden">
-			<div class="border-line/70 flex items-center gap-2.5 border-b px-5 py-3.5">
-				<h2 class="font-display text-fg text-sm font-700 tracking-wide">MEMBERS</h2>
-				<span class="label normal-case text-fg-faint">{members.length} registered</span>
-				<button
-					onclick={loadMembers}
-					class="label hover:text-signal ml-auto transition-colors"
-					disabled={loadingMembers}>{loadingMembers ? 'Loading…' : 'Refresh'}</button
-				>
-			</div>
-			{#if membersError}
-				<div class="text-coral px-5 py-3 text-xs">{membersError}</div>
-			{/if}
-			<div class="divide-line/60 divide-y">
-				{#each members as m (m.id)}
-					{@const self = m.id === auth.user?.id}
-					<div class="flex flex-wrap items-center gap-3 px-5 py-3 {m.blocked ? 'opacity-60' : ''}">
-						<div class="min-w-0 flex-1">
-							<div class="flex items-center gap-2">
-								<span class="text-fg truncate text-sm font-600">{m.displayName || m.email}</span>
-								{#if m.isOwner}
-									<span class="bg-signal/15 text-signal rounded-full px-2 py-0.5 text-[0.62rem] font-600"
-										>Owner</span
-									>
-								{/if}
-								{#if m.blocked}
-									<span class="bg-coral/15 text-coral rounded-full px-2 py-0.5 text-[0.62rem] font-600"
-										>Blocked</span
-									>
-								{/if}
-							</div>
-							<div class="text-fg-faint truncate text-xs">{m.email} · joined {ago(m.createdAt)}</div>
-						</div>
-						<label class="text-fg-dim flex items-center gap-1.5 text-xs">
-							<input
-								type="checkbox"
-								checked={m.isAdmin}
-								disabled={memberBusyId === m.id || self || m.isOwner}
-								onchange={(e) => setMemberAdmin(m, e.currentTarget.checked)}
-								class="accent-signal"
-							/>
-							Admin
-						</label>
-						<!-- Moderation: never available for the owner or your own account. -->
-						{#if !m.isOwner && !self}
-							<div class="flex items-center gap-3">
-								<button
-									onclick={() => setMemberBlocked(m, !m.blocked)}
-									disabled={memberBusyId === m.id}
-									class="text-xs font-600 transition-colors disabled:opacity-50 {m.blocked
-										? 'text-signal hover:text-signal/80'
-										: 'text-amber hover:text-amber/80'}"
-								>
-									{m.blocked ? 'Unblock' : 'Block'}
-								</button>
-								{#if confirmDeleteId === m.id}
-									<button
-										onclick={() => removeMember(m)}
-										disabled={memberBusyId === m.id}
-										class="text-coral text-xs font-700 disabled:opacity-50">Confirm</button
-									>
-									<button
-										onclick={() => (confirmDeleteId = null)}
-										class="text-fg-faint hover:text-fg-dim text-xs">Cancel</button
-									>
-								{:else}
-									<button
-										onclick={() => (confirmDeleteId = m.id)}
-										class="text-coral/80 hover:text-coral text-xs font-600">Remove</button
-									>
-								{/if}
-							</div>
-						{/if}
-					</div>
-				{/each}
-			</div>
-		</section>
+		<MembersPanel />
 	{/if}
 </div>

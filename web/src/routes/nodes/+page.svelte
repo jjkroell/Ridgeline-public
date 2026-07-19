@@ -8,16 +8,17 @@
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import FavoriteStar from '$lib/components/FavoriteStar.svelte';
 	import ClaimedBadge from '$lib/components/ClaimedBadge.svelte';
+	import NodeFilterModal from '$lib/components/NodeFilterModal.svelte';
 	import { favorites } from '$lib/favorites.svelte';
+	import { NodeFilters } from '$lib/node-filters.svelte';
 
 	const GPS_WARNING =
 		'GPS coordinates appear corrupt — a statistical outlier versus the rest of the mesh, so this node is hidden from the maps. The node is otherwise valid and still appears in packet paths.';
 
 	let nodes = $state<Node[]>([]);
 	let loading = $state(true);
-	let query = $state('');
-	let roleFilter = $state<string>('all');
-	let favOnly = $state(false);
+	const filters = new NodeFilters();
+	let filterOpen = $state(false);
 
 	async function refresh() {
 		try {
@@ -32,30 +33,10 @@
 		return () => clearInterval(t);
 	});
 
-	const roles = ['all', 'Repeater', 'ChatNode', 'RoomServer', 'Sensor'];
-	const roleLabels: Record<string, string> = {
-		all: 'All',
-		Repeater: 'Repeaters',
-		ChatNode: 'Companions',
-		RoomServer: 'Rooms',
-		Sensor: 'Sensors'
-	};
-
-	const filtered = $derived(
-		nodes.filter((n) => {
-			if (favOnly && !favorites.has(n.publicKey)) return false;
-			if (roleFilter !== 'all' && n.role !== roleFilter) return false;
-			if (!query) return true;
-			const q = query.toLowerCase();
-			return n.name.toLowerCase().includes(q) || n.publicKey.toLowerCase().includes(q);
-		})
-	);
-
-	// Favorites pinned to the top, otherwise preserving the API's last-seen order.
-	const sorted = $derived([
-		...filtered.filter((n) => favorites.has(n.publicKey)),
-		...filtered.filter((n) => !favorites.has(n.publicKey))
-	]);
+	// Filtering + ordering live in NodeFilters so /nodes and /m/nodes agree.
+	// NOTE: read `sorted` directly everywhere — aliasing a $derived with a plain
+	// `const` captures its value at init and never updates.
+	const sorted = $derived(filters.apply(nodes));
 </script>
 
 <Seo
@@ -66,56 +47,53 @@
 
 <PageHeader eyebrow="Mesh Inventory" title="Nodes">
 	<div class="font-mono text-fg-dim text-xs">
-		<span class="text-signal tnum">{fmtNum(filtered.length)}</span>
+		<span class="text-signal tnum">{fmtNum(sorted.length)}</span>
 		<span class="text-fg-faint"> / {fmtNum(nodes.length)} shown</span>
 	</div>
 </PageHeader>
 
 <div class="px-6 py-6 md:px-10">
-	<!-- Controls -->
-	<div class="mb-5 flex flex-wrap items-center gap-3">
-		<div class="panel flex items-center gap-2 px-3 py-2">
+	<!-- Controls: the table is the instrument, so these stay quiet — an underlined
+	     search field and one filter control that names what's constraining the list. -->
+	<div class="border-line/60 mb-5 flex items-center gap-5 border-b pb-2.5">
+		<div class="focus-within:border-signal/60 border-line/0 flex flex-1 items-center gap-2 border-b pb-0.5 transition-colors">
 			<svg
 				viewBox="0 0 24 24"
-				class="text-fg-faint h-4 w-4"
+				class="text-fg-faint h-4 w-4 shrink-0"
 				fill="none"
 				stroke="currentColor"
 				stroke-width="1.6"
 				stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg
 			>
 			<input
-				bind:value={query}
-				placeholder="Search name or key…"
-				class="font-mono placeholder:text-fg-faint w-48 bg-transparent text-sm outline-none"
+				bind:value={filters.query}
+				placeholder="Search name or key"
+				class="font-mono placeholder:text-fg-faint min-w-0 flex-1 bg-transparent text-sm outline-none"
 			/>
-		</div>
-		<div class="flex flex-wrap gap-1.5">
-			{#each roles as r (r)}
+			{#if filters.query}
 				<button
-					onclick={() => (roleFilter = r)}
-					class="rounded-[var(--radius)] border px-3 py-1.5 text-xs transition-colors
-						{roleFilter === r
-						? 'border-signal/50 text-signal bg-signal/10'
-						: 'border-line text-fg-dim hover:border-line-bright hover:text-fg'}"
+					onclick={() => (filters.query = '')}
+					aria-label="Clear search"
+					class="text-fg-faint hover:text-fg text-lg leading-none transition-colors">×</button
 				>
-					{roleLabels[r]}
-				</button>
-			{/each}
-			<Tooltip text="Show only favorited nodes">
-				<button
-					onclick={() => (favOnly = !favOnly)}
-					class="flex items-center gap-1.5 rounded-[var(--radius)] border px-3 py-1.5 text-xs transition-colors
-						{favOnly
-						? 'border-amber/50 text-amber bg-amber/10'
-						: 'border-line text-fg-dim hover:border-line-bright hover:text-fg'}"
-				>
-					<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill={favOnly ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.9l-5.8 3.05 1.1-6.45-4.7-4.6 6.5-.95z" />
-					</svg>
-					Favorites{#if favorites.count}<span class="tnum">{favorites.count}</span>{/if}
-				</button>
-			</Tooltip>
+			{/if}
 		</div>
+		<button
+			onclick={() => (filterOpen = true)}
+			class="flex shrink-0 items-center gap-2 text-xs transition-colors
+				{filters.activeCount ? 'text-signal' : 'text-fg-dim hover:text-fg'}"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				class="h-4 w-4"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.6"
+				stroke-linecap="round"
+				stroke-linejoin="round"><path d="M3 5h18M7 12h10M11 19h2" /></svg
+			>
+			<span class="font-mono">{filters.summary || 'Filter'}</span>
+		</button>
 	</div>
 
 	<!-- Table -->
@@ -137,9 +115,23 @@
 
 		{#if loading}
 			<div class="text-fg-faint px-5 py-12 text-center text-sm">Loading…</div>
-		{:else if filtered.length === 0}
-			<div class="text-fg-faint px-5 py-12 text-center text-sm">
-				{favOnly ? 'No favorite nodes yet — tap the ☆ on a node to add one.' : 'No matching nodes.'}
+		{:else if sorted.length === 0}
+			<div class="px-5 py-12 text-center">
+				<p class="text-fg-dim text-sm">
+					{#if filters.favOnly && !favorites.count}
+						No favorites yet. Star a node to keep it at the top of this list.
+					{:else if filters.claimedOnly}
+						No claimed nodes match. Claim one from its node page to see it here.
+					{:else}
+						No nodes match these filters.
+					{/if}
+				</p>
+				{#if filters.activeCount}
+					<button
+						onclick={() => filters.clear()}
+						class="text-signal mt-2 text-xs hover:underline">Clear filters</button
+					>
+				{/if}
 			</div>
 		{:else}
 			<div class="divide-line/50 divide-y">
@@ -184,3 +176,7 @@
 		{/if}
 	</div>
 </div>
+
+{#if filterOpen}
+	<NodeFilterModal {filters} {nodes} onclose={() => (filterOpen = false)} />
+{/if}

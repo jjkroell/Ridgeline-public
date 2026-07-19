@@ -4,10 +4,12 @@
 	import { ago, shortKey, nodeStatus, roleColor, roleLabel, lastHeard } from '$lib/format';
 	import { favorites } from '$lib/favorites.svelte';
 	import ClaimedBadge from '$lib/components/ClaimedBadge.svelte';
+	import NodeFilterModal from '$lib/components/NodeFilterModal.svelte';
+	import { NodeFilters } from '$lib/node-filters.svelte';
 
 	let nodes = $state<Node[]>([]);
-	let q = $state('');
-	let filter = $state<'all' | 'fav' | 'Repeater' | 'Companion' | 'RoomServer' | 'Sensor'>('all');
+	const filters = new NodeFilters();
+	let filterOpen = $state(false);
 
 	async function refresh() {
 		try {
@@ -22,52 +24,26 @@
 		return () => clearInterval(t);
 	});
 
-	const chips: { key: typeof filter; label: string }[] = [
-		{ key: 'all', label: 'All' },
-		{ key: 'fav', label: '★ Favorites' },
-		{ key: 'Repeater', label: 'Repeaters' },
-		{ key: 'Companion', label: 'Companions' },
-		{ key: 'RoomServer', label: 'Rooms' },
-		{ key: 'Sensor', label: 'Sensors' }
-	];
-
-	const filtered = $derived.by(() => {
-		const term = q.trim().toLowerCase();
-		let list = nodes.filter((n) => {
-			if (filter === 'fav') return favorites.has(n.publicKey);
-			if (filter !== 'all') return n.role === filter;
-			return true;
-		});
-		if (term)
-			list = list.filter(
-				(n) => n.name?.toLowerCase().includes(term) || n.publicKey.toLowerCase().includes(term)
-			);
-		// favorites pinned to top, then most-recent
-		return [...list].sort((a, b) => {
-			const fa = favorites.has(a.publicKey) ? 1 : 0;
-			const fb = favorites.has(b.publicKey) ? 1 : 0;
-			if (fa !== fb) return fb - fa;
-			return (b.lastSeen ?? '').localeCompare(a.lastSeen ?? '');
-		});
-	});
+	// Filtering + ordering live in NodeFilters so /nodes and /m/nodes agree.
+	const filtered = $derived(filters.apply(nodes));
 </script>
 
 <div class="px-4 py-4">
-	<!-- Search -->
-	<div class="border-line bg-panel mb-3 flex items-center gap-2 rounded-xl border px-3 py-2.5">
+	<!-- Controls: quiet by design — search plus one control that names the active filters. -->
+	<div class="border-line bg-panel mb-2 flex items-center gap-2 rounded-xl border px-3 py-2.5">
 		<svg viewBox="0 0 24 24" class="text-fg-faint h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-		<input bind:value={q} placeholder="Search nodes…" class="text-fg placeholder:text-fg-faint min-w-0 flex-1 bg-transparent text-sm outline-none" />
-		{#if q}<button onclick={() => (q = '')} class="text-fg-faint text-lg leading-none">×</button>{/if}
+		<input bind:value={filters.query} placeholder="Search nodes…" class="text-fg placeholder:text-fg-faint min-w-0 flex-1 bg-transparent text-sm outline-none" />
+		{#if filters.query}<button onclick={() => (filters.query = '')} aria-label="Clear search" class="text-fg-faint text-lg leading-none">×</button>{/if}
 	</div>
 
-	<!-- Filter chips -->
-	<div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1" style="scrollbar-width:none">
-		{#each chips as c (c.key)}
-			<button
-				onclick={() => (filter = c.key)}
-				class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-600 transition-colors {filter === c.key ? 'border-signal/50 bg-signal/15 text-signal' : 'border-line text-fg-dim'}"
-			>{c.label}</button>
-		{/each}
+	<div class="mb-3 flex items-center gap-3 px-1">
+		<button
+			onclick={() => (filterOpen = true)}
+			class="flex items-center gap-1.5 text-xs {filters.activeCount ? 'text-signal' : 'text-fg-dim'}"
+		>
+			<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M7 12h10M11 19h2" /></svg>
+			<span class="font-mono">{filters.summary || 'Filter'}</span>
+		</button>
 	</div>
 
 	<div class="text-fg-faint mb-2 px-1 font-mono text-[0.62rem]">{filtered.length} node{filtered.length === 1 ? '' : 's'}</div>
@@ -75,7 +51,20 @@
 	<!-- List -->
 	<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
 		{#if filtered.length === 0}
-			<div class="text-fg-faint px-4 py-10 text-center text-sm">No nodes match.</div>
+			<div class="px-4 py-10 text-center">
+				<p class="text-fg-dim text-sm">
+					{#if filters.favOnly && !favorites.count}
+						No favorites yet. Star a node to keep it at the top.
+					{:else if filters.claimedOnly}
+						No claimed nodes match.
+					{:else}
+						No nodes match these filters.
+					{/if}
+				</p>
+				{#if filters.activeCount}
+					<button onclick={() => filters.clear()} class="text-signal mt-2 text-xs">Clear filters</button>
+				{/if}
+			</div>
 		{:else}
 			{#each filtered as n (n.publicKey)}
 				{@const st = nodeStatus(n)}
@@ -107,3 +96,7 @@
 		{/if}
 	</div>
 </div>
+
+{#if filterOpen}
+	<NodeFilterModal {filters} {nodes} onclose={() => (filterOpen = false)} />
+{/if}

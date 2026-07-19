@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLocationShares(t *testing.T) {
 	st := testStore(t)
@@ -108,5 +111,41 @@ func TestSharedWithMe(t *testing.T) {
 	}
 	if n, _ := st.UnseenShareCount(me.ID); n != 1 {
 		t.Errorf("re-share should reset unseen to 1, got %d", n)
+	}
+}
+
+// TestSharesForUserNodePresent mirrors TestListUserClaimsNodePresent: a share
+// outlives its node row when retention prunes a silent node, and the UI needs
+// that apart from a node that is present but unnamed.
+func TestSharesForUserNodePresent(t *testing.T) {
+	st := testStore(t)
+	owner, _ := st.CreateUser("owner@example.com", "h", "Owner")
+	g, _ := st.CreateUser("grantee@example.com", "h", "Grantee")
+
+	present := "3333333333333333333333333333333333333333333333333333333333333333"
+	absent := "4444444444444444444444444444444444444444444444444444444444444444"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	// Present but UNNAMED — must still report as present.
+	st.db.Exec(`INSERT INTO nodes(pubkey,name,role,first_seen,last_seen,advert_count,advert_tx_count,hash_size)
+		VALUES(?,'','',?,?,0,0,0)`, present, now, now)
+	for _, k := range []string{present, absent} {
+		if err := st.ShareLocation(k, owner.ID, g.ID); err != nil {
+			t.Fatalf("share %s: %v", k[:4], err)
+		}
+	}
+
+	got := map[string]bool{}
+	sh, err := st.SharesForUser(g.ID)
+	if err != nil {
+		t.Fatalf("shares: %v", err)
+	}
+	for _, s := range sh {
+		got[s.NodePubkey] = s.NodePresent
+	}
+	if !got[present] {
+		t.Error("unnamed but present node must report nodePresent=true")
+	}
+	if got[absent] {
+		t.Error("pruned node must report nodePresent=false")
 	}
 }

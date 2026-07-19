@@ -80,6 +80,8 @@ class LiveFeed {
 	#retry = 0;
 	#timer: ReturnType<typeof setTimeout> | null = null;
 	#started = false;
+	#everConnected = false;
+	#hydrating = false;
 
 	start() {
 		if (this.#started) return;
@@ -89,22 +91,32 @@ class LiveFeed {
 	}
 
 	// Seed the buffer with the last hour of history so the feed renders
-	// immediately instead of waiting for fresh packets.
+	// immediately instead of waiting for fresh packets. Also run after every
+	// RECONNECT: the socket carries no backlog, so whatever was published while
+	// it was down would otherwise be missing from the buffer for good — the page
+	// looks connected and healthy while silently omitting messages.
 	async #hydrate() {
+		if (this.#hydrating) return;
+		this.#hydrating = true;
 		try {
 			const recent = await api.recent(3600);
 			const cutoff = Date.now() - RETAIN_MS;
 			const seed = recent.filter((e) => +new Date(e.receivedAt) >= cutoff);
-			// Any events that streamed in while fetching take precedence; append
-			// the (older) history after them, de-duped by observer+hash+time.
+			// Anything already in the buffer wins; add only what's missing, keyed by
+			// observer+hash+time. Re-sorted newest-first so backfilled events land in
+			// order rather than after the ones that arrived while the fetch was in
+			// flight (consumers that slice the newest N depend on this).
 			const seen = new Set(this.events.map((e) => e.observerId + e.messageHash + e.receivedAt));
 			const merged = [
 				...this.events,
 				...seed.filter((e) => !seen.has(e.observerId + e.messageHash + e.receivedAt))
 			];
+			merged.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
 			this.events = merged.slice(0, MAX_EVENTS);
 		} catch {
 			/* history is best-effort; live stream still works */
+		} finally {
+			this.#hydrating = false;
 		}
 	}
 
@@ -116,6 +128,11 @@ class LiveFeed {
 		ws.onopen = () => {
 			this.connected = true;
 			this.#retry = 0;
+			// A reconnect means the stream had a gap (daemon redeploy, tunnel blip,
+			// laptop sleep, PWA backgrounded). start() already hydrated the first
+			// connection, so only backfill from the second onwards.
+			if (this.#everConnected) this.#hydrate();
+			this.#everConnected = true;
 		};
 		ws.onmessage = (e) => {
 			try {

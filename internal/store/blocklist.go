@@ -192,6 +192,13 @@ func (s *Store) ListBlocks() ([]BlockEntry, error) {
 type PurgeResult struct {
 	Observations int64 `json:"observations"`
 	Nodes        int64 `json:"nodes"`
+	Claims       int64 `json:"claims"`
+	Notes        int64 `json:"notes"`
+	Locations    int64 `json:"locations"`
+	Shares       int64 `json:"shares"`
+	// SkippedClaimed lists keys the caller held back from the delete because a
+	// user has claimed them (set by the purge handler, not by the store).
+	SkippedClaimed []string `json:"skippedClaimed,omitempty"`
 }
 
 // PurgeTargets hard-deletes stored data for the given targets in a single
@@ -199,7 +206,30 @@ type PurgeResult struct {
 // observations whose flood path transits any bridge pubkey in bridges, and the
 // own adverts + node rows of any pubkey in nodes (and bridges). Pubkeys are
 // matched case-insensitively; bridge path matching is by hash-prefix.
+//
+// User-authored data keyed to the node (claims, notes, private location,
+// location shares) is PRESERVED. This is the path the automatic retention sweep
+// uses, where a node pruned for going silent is expected to come back on its
+// next advert — an operator who takes a repeater down for a week must not lose
+// their ownership claim or private location. Use ScrubNodes for deliberate
+// admin removal, which does cascade.
 func (s *Store) PurgeTargets(observers, bridges, nodes []string) (PurgeResult, error) {
+	return s.purgeTargets(observers, bridges, nodes, false)
+}
+
+// ScrubNodes hard-deletes nodes AND the user-authored data keyed to them
+// (claims, notes, private location, location shares). This is the admin scrub /
+// purge path, where removal is deliberate and permanent — the node is bogus,
+// foreign, or injected, so its claim should not survive. Leaving the claim
+// behind orphaned it: it still rendered in "Claimed Nodes" and on badges
+// pointing at a node that no longer exists, and — because idx_claims_one_owner
+// is unique per node — it would block the node from ever being re-claimed if it
+// advertised again.
+func (s *Store) ScrubNodes(observers, bridges, nodes []string) (PurgeResult, error) {
+	return s.purgeTargets(observers, bridges, nodes, true)
+}
+
+func (s *Store) purgeTargets(observers, bridges, nodes []string, cascadeUserData bool) (PurgeResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -268,7 +298,8 @@ func (s *Store) PurgeTargets(observers, bridges, nodes []string) (PurgeResult, e
 		res.Observations += n
 	}
 
-	// Delete node rows for explicitly targeted nodes/bridges.
+	// Delete node rows for explicitly targeted nodes/bridges, along with the
+	// user-authored data keyed to them (see the doc comment).
 	for k := range nodeSet {
 		r, err := tx.Exec(`DELETE FROM nodes WHERE UPPER(pubkey) = ?`, k)
 		if err != nil {
@@ -276,6 +307,26 @@ func (s *Store) PurgeTargets(observers, bridges, nodes []string) (PurgeResult, e
 		}
 		n, _ := r.RowsAffected()
 		res.Nodes += n
+
+		if !cascadeUserData {
+			continue
+		}
+		for _, c := range []struct {
+			query string
+			count *int64
+		}{
+			{`DELETE FROM node_claims WHERE UPPER(node_pubkey) = ?`, &res.Claims},
+			{`DELETE FROM node_notes WHERE UPPER(node_pubkey) = ?`, &res.Notes},
+			{`DELETE FROM node_private_locations WHERE UPPER(node_pubkey) = ?`, &res.Locations},
+			{`DELETE FROM location_shares WHERE UPPER(node_pubkey) = ?`, &res.Shares},
+		} {
+			r, err := tx.Exec(c.query, k)
+			if err != nil {
+				return res, err
+			}
+			n, _ := r.RowsAffected()
+			*c.count += n
+		}
 	}
 	// Delete observer rows for purged observers.
 	for o := range obsSet {
@@ -286,6 +337,17 @@ func (s *Store) PurgeTargets(observers, bridges, nodes []string) (PurgeResult, e
 
 	if err := tx.Commit(); err != nil {
 		return res, err
+	}
+
+	// Deleting node_claims rows invalidates the pending-claim cache that gates
+	// the ingest advert verifier, so refresh it like every other writer of that
+	// table does. This MUST run after Commit: loadPendingClaims issues its own
+	// query, and with SetMaxOpenConns(1) it would block forever waiting on the
+	// single connection an open transaction still holds.
+	if res.Claims > 0 {
+		if err := s.loadPendingClaims(); err != nil {
+			return res, err
+		}
 	}
 	return res, nil
 }

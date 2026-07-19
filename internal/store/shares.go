@@ -43,6 +43,11 @@ type SharedWithMe struct {
 	SharedByName string `json:"sharedByName"`
 	CreatedAt    string `json:"createdAt"`
 	Seen         bool   `json:"seen"`
+	// NodePresent reports whether the shared node is currently in the mesh. Like
+	// a claim, a share outlives its node row when the retention sweep prunes a
+	// node that went silent, so callers render those as dormant rather than
+	// linking to a node page that would 404. See ClaimWithNode.NodePresent.
+	NodePresent bool `json:"nodePresent"`
 }
 
 // SharesForUser returns the nodes shared with granteeUserID (newest first),
@@ -51,7 +56,7 @@ func (s *Store) SharesForUser(granteeUserID int64) ([]SharedWithMe, error) {
 	rows, err := s.db.Query(`
 		SELECT ls.node_pubkey, COALESCE(n.name,''), COALESCE(n.role,''),
 		       ls.owner_user_id, COALESCE(NULLIF(o.display_name,''), o.email),
-		       ls.created_at, ls.seen
+		       ls.created_at, ls.seen, n.pubkey IS NOT NULL
 		FROM location_shares ls
 		JOIN users o ON o.id = ls.owner_user_id
 		LEFT JOIN nodes n ON n.pubkey = ls.node_pubkey
@@ -66,7 +71,7 @@ func (s *Store) SharesForUser(granteeUserID int64) ([]SharedWithMe, error) {
 		var sh SharedWithMe
 		var seen int
 		if err := rows.Scan(&sh.NodePubkey, &sh.NodeName, &sh.NodeRole, &sh.SharedByID,
-			&sh.SharedByName, &sh.CreatedAt, &seen); err != nil {
+			&sh.SharedByName, &sh.CreatedAt, &seen, &sh.NodePresent); err != nil {
 			return nil, err
 		}
 		sh.Seen = seen != 0

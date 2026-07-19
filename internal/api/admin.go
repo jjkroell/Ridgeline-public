@@ -118,13 +118,32 @@ func (s *Server) adminPurge(w http.ResponseWriter, r *http.Request, _ store.User
 	for _, b := range req.Bridges {
 		s.store.AddBlock("bridge", b, "", "purged")
 	}
-	res, err := s.store.PurgeTargets(req.Observers, req.Bridges, req.Nodes)
+	// Purge targets come from the captivity DETECTOR, which is documented to
+	// over-flag in a sparse-observer mesh. A claimed node is evidence it misfired,
+	// so everything still gets blocked (reversible, and it's what actually stops
+	// the traffic) but claimed keys are held back from the delete, which is not
+	// reversible. Deliberate removal is what adminDelete is for.
+	nodes, skippedNodes, err := s.store.PartitionClaimed(req.Nodes)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	bridges, skippedBridges, err := s.store.PartitionClaimed(req.Bridges)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	res, err := s.store.ScrubNodes(req.Observers, bridges, nodes)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	res.SkippedClaimed = append(skippedNodes, skippedBridges...)
 	s.log.Info("admin purged", "observers", len(req.Observers), "bridges", len(req.Bridges),
-		"nodes", len(req.Nodes), "observationsDeleted", res.Observations, "nodesDeleted", res.Nodes)
+		"nodes", len(req.Nodes), "observationsDeleted", res.Observations, "nodesDeleted", res.Nodes,
+		"claimsDeleted", res.Claims, "notesDeleted", res.Notes,
+		"locationsDeleted", res.Locations, "sharesDeleted", res.Shares,
+		"skippedClaimed", res.SkippedClaimed)
 	writeJSON(w, res)
 }
 
@@ -146,13 +165,15 @@ func (s *Server) adminDelete(w http.ResponseWriter, r *http.Request, _ store.Use
 		writeErr(w, http.StatusBadRequest, "nothing to delete")
 		return
 	}
-	res, err := s.store.PurgeTargets(req.Observers, nil, req.Nodes)
+	res, err := s.store.ScrubNodes(req.Observers, nil, req.Nodes)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
 	s.log.Info("admin deleted", "nodes", len(req.Nodes), "observers", len(req.Observers),
-		"observationsDeleted", res.Observations, "nodesDeleted", res.Nodes)
+		"observationsDeleted", res.Observations, "nodesDeleted", res.Nodes,
+		"claimsDeleted", res.Claims, "notesDeleted", res.Notes,
+		"locationsDeleted", res.Locations, "sharesDeleted", res.Shares)
 	writeJSON(w, res)
 }
 

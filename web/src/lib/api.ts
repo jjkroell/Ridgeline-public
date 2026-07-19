@@ -367,6 +367,14 @@ export interface BlockEntry {
 export interface PurgeResult {
 	observations: number;
 	nodes: number;
+	/** User-authored data cascaded with a purged node (see store.PurgeTargets). */
+	claims: number;
+	notes: number;
+	locations: number;
+	shares: number;
+	/** Keys held back from a purge because a user has claimed them — evidence the
+	 *  detector misfired, so they're blocked but not deleted. */
+	skippedClaimed?: string[];
 }
 
 // The admin console is gated by the is_admin account (session auth). Reads use
@@ -612,6 +620,10 @@ export interface ClaimStatus {
 export interface ClaimWithNode extends Claim {
 	nodeName: string;
 	nodeRole: string;
+	/** False when the claimed node isn't currently in the mesh — the retention
+	 *  sweep prunes silent nodes but the owner keeps the claim, so these render
+	 *  as dormant rather than linking to a node page that would 404. */
+	nodePresent: boolean;
 }
 
 export const claims = {
@@ -745,6 +757,9 @@ export interface SharedWithMe {
 	sharedByName: string;
 	createdAt: string;
 	seen: boolean;
+	/** False when the shared node isn't currently in the mesh — same dormant
+	 *  treatment as ClaimWithNode.nodePresent. */
+	nodePresent: boolean;
 }
 
 /** Grantee-facing: the nodes shared with me + clearing the "new" badge. */

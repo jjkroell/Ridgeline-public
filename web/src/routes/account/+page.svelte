@@ -6,6 +6,7 @@
 	import { ago, shortKey } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import OwnershipIcon from '$lib/components/OwnershipIcon.svelte';
+	import Tooltip from '$lib/components/Tooltip.svelte';
 	import AccountSettings from '$lib/components/AccountSettings.svelte';
 	import DeleteAccountPanel from '$lib/components/DeleteAccountPanel.svelte';
 
@@ -199,9 +200,12 @@
 				{#if openNodes}
 				<div class="divide-line/60 divide-y">
 					{#each myNodes as c (c.id)}
-						<a
-							href="/nodes/{c.nodePubkey}"
-							class="panel-hover flex items-center gap-3 px-5 py-3"
+						<!-- A claim outlives its node: retention prunes silent nodes but ownership
+						     survives, so dormant claims render un-linked instead of 404-ing. -->
+						<svelte:element
+							this={c.nodePresent ? 'a' : 'div'}
+							href={c.nodePresent ? `/nodes/${c.nodePubkey}` : undefined}
+							class="flex items-center gap-3 px-5 py-3 {c.nodePresent ? 'panel-hover' : 'opacity-70'}"
 						>
 							<span class="min-w-0 flex-1">
 								<span class="flex items-center gap-1.5">
@@ -210,7 +214,15 @@
 								</span>
 								<span class="text-fg-faint block truncate font-mono text-xs">{shortKey(c.nodePubkey, 6, 4)}</span>
 							</span>
-							{#if c.status === 'verified'}
+							{#if !c.nodePresent}
+								<Tooltip
+									text="This node hasn't been heard in a while, so it's no longer listed in the mesh. Your claim is kept — it reconnects automatically if the node advertises again."
+								>
+									<span class="border-line text-fg-dim rounded-full border px-2.5 py-1 text-xs font-600"
+										>Dormant</span
+									>
+								</Tooltip>
+							{:else if c.status === 'verified'}
 								<span class="bg-signal/15 text-signal rounded-full px-2.5 py-1 text-xs font-600"
 									>Owned</span
 								>
@@ -219,7 +231,7 @@
 									>Pending</span
 								>
 							{/if}
-						</a>
+						</svelte:element>
 					{/each}
 				</div>
 				{/if}
@@ -246,7 +258,14 @@
 				{#if openShared}
 				<div class="divide-line/60 divide-y">
 					{#each sharedWithMe as sh (sh.nodePubkey)}
-						<a href="/nodes/{sh.nodePubkey}" class="panel-hover flex items-center gap-3 px-5 py-3">
+						<!-- Shares outlive their node the same way claims do — see the My nodes list. -->
+						<svelte:element
+							this={sh.nodePresent ? 'a' : 'div'}
+							href={sh.nodePresent ? `/nodes/${sh.nodePubkey}` : undefined}
+							class="flex items-center gap-3 px-5 py-3 {sh.nodePresent
+								? 'panel-hover'
+								: 'opacity-70'}"
+						>
 							<span class="min-w-0 flex-1">
 								<span class="flex items-center gap-1.5">
 									<span class="text-fg truncate text-sm font-600">{sh.nodeName || shortKey(sh.nodePubkey)}</span>
@@ -256,10 +275,18 @@
 									>Shared by {sh.sharedByName} · {ago(sh.createdAt)}</span
 								>
 							</span>
-							{#if !sh.seen}
+							{#if !sh.nodePresent}
+								<Tooltip
+									text="This node hasn't been heard in a while, so it's no longer listed in the mesh. The share is kept — it reconnects automatically if the node advertises again."
+								>
+									<span class="border-line text-fg-dim rounded-full border px-2.5 py-1 text-xs font-600"
+										>Dormant</span
+									>
+								</Tooltip>
+							{:else if !sh.seen}
 								<span class="bg-signal text-ink rounded-full px-2.5 py-1 text-xs font-700">New</span>
 							{/if}
-						</a>
+						</svelte:element>
 					{/each}
 				</div>
 				{/if}

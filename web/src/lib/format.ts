@@ -132,3 +132,30 @@ export function fmtRadio(r?: string): string {
 export function isFresh(iso?: string): boolean {
 	return !!iso && Date.now() - new Date(iso).getTime() < 5 * 60 * 1000;
 }
+
+/** Summarise the user-authored data a node purge cascaded, e.g. "1 claim, 3 notes".
+ *  Empty when the node carried none, so callers can append it conditionally. */
+export function purgeCascade(r: {
+	claims?: number;
+	notes?: number;
+	locations?: number;
+	shares?: number;
+}): string {
+	const parts: string[] = [];
+	const add = (n: number | undefined, one: string, many: string) => {
+		if (n) parts.push(`${n} ${n === 1 ? one : many}`);
+	};
+	add(r.claims, 'claim', 'claims');
+	add(r.notes, 'note', 'notes');
+	add(r.locations, 'private location', 'private locations');
+	add(r.shares, 'location share', 'location shares');
+	return parts.join(', ');
+}
+
+/** Trailing note naming keys a purge left alone because they're claimed. Empty
+ *  when none were skipped, so callers can append it unconditionally. */
+export function skippedNote(r: { skippedClaimed?: string[] }): string {
+	const n = r.skippedClaimed?.length ?? 0;
+	if (!n) return '';
+	return ` Left ${n} claimed node${n === 1 ? '' : 's'} untouched — a claim means the detector likely misfired; scrub by key if it really is foreign.`;
+}

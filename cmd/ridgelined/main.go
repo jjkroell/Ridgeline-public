@@ -467,6 +467,19 @@ func runArtifactScrub(ctx context.Context, st *store.Store, log *slog.Logger) {
 		if len(keys) == 0 {
 			return
 		}
+		// A claimed node is not a corruption artifact, whatever the heuristic
+		// scores it — see store.PartitionClaimed.
+		keys, skipped, err := st.PartitionClaimed(keys)
+		if err != nil {
+			log.Warn("artifact scrub: claim check", "err", err)
+			return
+		}
+		if len(skipped) > 0 {
+			log.Info("artifact scrub: skipped claimed nodes", "count", len(skipped), "nodes", skipped)
+		}
+		if len(keys) == 0 {
+			return
+		}
 		res, err := st.PurgeTargets(nil, nil, keys)
 		if err != nil {
 			log.Warn("artifact scrub: purge", "err", err)

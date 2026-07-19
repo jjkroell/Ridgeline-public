@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jjkroell/ridgeline/internal/meshcore"
 )
@@ -114,5 +115,136 @@ func TestBlocklistCaseInsensitiveNodeKey(t *testing.T) {
 	}
 	if !st.ShouldDrop(advertPkt("ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"), "o") {
 		t.Error("advert from blocked node (upper) not dropped")
+	}
+}
+
+// TestScrubNodesCascadesNodeData covers the orphan bug: an admin scrub used to
+// delete only observations and the nodes row, leaving the user-authored data
+// keyed to it behind. A stale verified claim kept rendering in "Claimed Nodes"
+// and on badges pointing at a node that no longer existed, and — since the
+// verified-owner index is unique per node — blocked any future re-claim.
+func TestScrubNodesCascadesNodeData(t *testing.T) {
+	st := testStore(t)
+	node := "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899"
+
+	st.CreateUser("owner@example.com", "h", "Owner") // first = admin/owner
+	u, _ := st.CreateUser("claimer@example.com", "h", "Claimer")
+	g, _ := st.CreateUser("grantee@example.com", "h", "Grantee")
+
+	if _, err := st.CreateVerifiedClaim(node, u.ID); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := st.CreateNote(node, u.ID, "public", "rooftop repeater"); err != nil {
+		t.Fatalf("note: %v", err)
+	}
+	if _, err := st.SetPrivateLocation(node, u.ID, 49.25, -123.65, "rooftop"); err != nil {
+		t.Fatalf("location: %v", err)
+	}
+	if err := st.ShareLocation(node, u.ID, g.ID); err != nil {
+		t.Fatalf("share: %v", err)
+	}
+
+	res, err := st.ScrubNodes(nil, nil, []string{node})
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if res.Claims != 1 || res.Notes != 1 || res.Locations != 1 || res.Shares != 1 {
+		t.Fatalf("cascade counts: %+v", res)
+	}
+
+	// Nothing keyed to the node survives.
+	if _, ok, _ := st.NodeOwner(node); ok {
+		t.Error("verified claim survived the purge")
+	}
+	if claimed, _ := st.ClaimedNodeKeys(); len(claimed) != 0 {
+		t.Errorf("node still reports as claimed: %v", claimed)
+	}
+	if cs, _ := st.ListUserClaims(u.ID); len(cs) != 0 {
+		t.Errorf("orphan claim still listed for user: %+v", cs)
+	}
+	if _, ok, _ := st.GetPrivateLocation(node); ok {
+		t.Error("private location survived the purge")
+	}
+	if sh, _ := st.SharesForUser(g.ID); len(sh) != 0 {
+		t.Error("location share survived the purge")
+	}
+
+	// The node is re-claimable, which the unique verified-owner index would
+	// have prevented while the ghost claim existed.
+	if _, err := st.CreateVerifiedClaim(node, g.ID); err != nil {
+		t.Fatalf("re-claim after purge: %v", err)
+	}
+}
+
+// TestPurgeTargetsPreservesUserData is the counterpart to the scrub test: the
+// automatic retention sweep uses PurgeTargets, and a node pruned for going
+// silent is expected to return on its next advert. Its owner must keep the
+// claim, notes and private location across that gap — cascading here would
+// silently destroy an operator's data every time their repeater went quiet for
+// the retention window.
+func TestPurgeTargetsPreservesUserData(t *testing.T) {
+	st := testStore(t)
+	node := "BBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AA"
+
+	st.CreateUser("owner@example.com", "h", "Owner")
+	u, _ := st.CreateUser("claimer@example.com", "h", "Claimer")
+	g, _ := st.CreateUser("grantee@example.com", "h", "Grantee")
+
+	if _, err := st.CreateVerifiedClaim(node, u.ID); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := st.CreateNote(node, u.ID, "public", "rooftop repeater"); err != nil {
+		t.Fatalf("note: %v", err)
+	}
+	if _, err := st.SetPrivateLocation(node, u.ID, 49.25, -123.65, "rooftop"); err != nil {
+		t.Fatalf("location: %v", err)
+	}
+	if err := st.ShareLocation(node, u.ID, g.ID); err != nil {
+		t.Fatalf("share: %v", err)
+	}
+
+	res, err := st.PurgeTargets(nil, nil, []string{node})
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if res.Claims != 0 || res.Notes != 0 || res.Locations != 0 || res.Shares != 0 {
+		t.Fatalf("retention purge must not cascade user data: %+v", res)
+	}
+
+	// Ownership and the owner's data survive the node row going away.
+	if owner, ok, _ := st.NodeOwner(node); !ok || owner.UserID != u.ID {
+		t.Error("verified claim must survive a retention purge")
+	}
+	if _, ok, _ := st.GetPrivateLocation(node); !ok {
+		t.Error("private location must survive a retention purge")
+	}
+	if sh, _ := st.SharesForUser(g.ID); len(sh) != 1 {
+		t.Error("location share must survive a retention purge")
+	}
+}
+
+// TestScrubNodesRefreshesPendingClaimCache guards the cache half of the cascade:
+// node_claims rows are deleted with raw SQL inside the purge transaction, so the
+// in-memory pending set that gates the ingest advert verifier has to be reloaded
+// afterwards. Without it HasPendingClaim keeps reporting a scrubbed node as
+// pending until the daemon restarts.
+func TestScrubNodesRefreshesPendingClaimCache(t *testing.T) {
+	st := testStore(t)
+	node := "CCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABB"
+
+	st.CreateUser("owner@example.com", "h", "Owner")
+	u, _ := st.CreateUser("claimer@example.com", "h", "Claimer")
+	if _, err := st.CreateOrRefreshClaim(node, u.ID, "K7X4QP", 30*time.Minute); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if !st.HasPendingClaim(node) {
+		t.Fatal("precondition: node should start with a pending claim")
+	}
+
+	if _, err := st.ScrubNodes(nil, nil, []string{node}); err != nil {
+		t.Fatalf("scrub: %v", err)
+	}
+	if st.HasPendingClaim(node) {
+		t.Error("scrubbed node still reported as having a pending claim")
 	}
 }

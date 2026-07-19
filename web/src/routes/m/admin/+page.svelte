@@ -3,7 +3,8 @@
 	import { auth } from '$lib/auth.svelte';
 	import { confirmer } from '$lib/confirm.svelte';
 	import { admin, type InjectionReport, type BlockEntry, type BridgeCandidate, type InjectorCandidate } from '$lib/api';
-	import { roleColor } from '$lib/format';
+	import { purgeCascade, roleColor, skippedNote } from '$lib/format';
+	import MembersPanel from '$lib/components/MembersPanel.svelte';
 
 	// Gated by the signed-in account's is_admin flag (no static token). Bounce
 	// non-admins once the /me probe resolves.
@@ -69,7 +70,7 @@
 		const captive = b.foreign.filter((f) => f.captive).map((f) => f.key);
 		if (!(await confirmer.ask({ title: `Purge bridge ${b.name}?`, message: `Permanently deletes ${captive.length} captive node${captive.length === 1 ? '' : 's'} and blocks the bridge. Cannot be undone.`, confirmLabel: 'Purge', danger: true }))) return;
 		busy = b.nodeKey; msg = '';
-		try { const r = await admin.purge(auth.csrf, { bridges: [b.nodeKey], nodes: captive }); await refreshBlocks(); report = null; msg = `Purged ${b.name}: ${r.observations} obs, ${r.nodes} nodes.`; }
+		try { const r = await admin.purge(auth.csrf, { bridges: [b.nodeKey], nodes: captive }); await refreshBlocks(); report = null; msg = `Purged ${b.name}: ${r.observations} obs, ${r.nodes} nodes.` + skippedNote(r); }
 		catch (e) { msg = `purge: ${(e as Error).message}`; } finally { busy = ''; }
 	}
 	async function quarantineInjector(i: InjectorCandidate) {
@@ -80,7 +81,7 @@
 	async function purgeInjector(i: InjectorCandidate) {
 		if (!(await confirmer.ask({ title: `Purge injector ${i.observer}?`, message: `Permanently deletes packets from ${i.observer} and its ${i.exclusiveCount} node${i.exclusiveCount === 1 ? '' : 's'}. Cannot be undone.`, confirmLabel: 'Purge', danger: true }))) return;
 		busy = i.observer; msg = '';
-		try { const r = await admin.purge(auth.csrf, { observers: [i.observer], nodes: i.exclusive.map((f) => f.key) }); await refreshBlocks(); report = null; msg = `Purged ${i.observer}: ${r.observations} obs.`; }
+		try { const r = await admin.purge(auth.csrf, { observers: [i.observer], nodes: i.exclusive.map((f) => f.key) }); await refreshBlocks(); report = null; msg = `Purged ${i.observer}: ${r.observations} obs.` + skippedNote(r); }
 		catch (e) { msg = `purge: ${(e as Error).message}`; } finally { busy = ''; }
 	}
 	async function removeBlock(b: BlockEntry) {
@@ -98,11 +99,13 @@
 		const key = scrubKey.trim().toUpperCase();
 		if (!key) return;
 		if (!/^[0-9A-F]{6,64}$/.test(key)) { msg = 'scrub: enter a hex public key (full key for an exact match).'; return; }
-		if (!(await confirmer.ask({ title: 'Scrub this node?', message: 'Permanently deletes the node and all of its data points. This cannot be undone.', code: key, confirmLabel: 'Scrub', danger: true }))) return;
+		if (!(await confirmer.ask({ title: 'Scrub this node?', message: 'Permanently deletes the node, all of its data points, and any ownership claim, notes, private location and location shares attached to it. This cannot be undone.', code: key, confirmLabel: 'Scrub', danger: true }))) return;
 		scrubbing = true; msg = '';
 		try {
 			const res = await admin.deleteNodes(auth.csrf, [key]);
-			msg = res.nodes > 0 ? `Scrubbed ${key}: ${res.nodes} node row + ${res.observations} data points.` : `No node matched ${key} (removed ${res.observations} data points). Use the full key.`;
+			const cascaded = purgeCascade(res);
+			// No node row but leftover user data = a ghost from a pre-cascade scrub.
+			msg = res.nodes > 0 ? `Scrubbed ${key}: ${res.nodes} node row + ${res.observations} data points${cascaded ? ` + ${cascaded}` : ''}.` : cascaded ? `No node matched ${key}, but cleaned up ${cascaded} left over from an earlier scrub.` : `No node matched ${key} (removed ${res.observations} data points). Use the full key.`;
 			scrubKey = '';
 			await refreshBlocks();
 		} catch (e) { msg = `scrub: ${(e as Error).message}`; } finally { scrubbing = false; }
@@ -133,7 +136,7 @@
 		<!-- Scrub node by key -->
 		<div class="border-line/60 bg-panel mb-3 rounded-2xl border p-4">
 			<div class="label normal-case text-fg-faint mb-1">Scrub node by key</div>
-			<p class="text-fg-faint mb-3 text-xs">Permanently delete a node + all its data points. Paste the full public key. Irreversible.</p>
+			<p class="text-fg-faint mb-3 text-xs">Permanently delete a node + all its data points, plus any ownership claim, notes, private location and location shares attached to it. Paste the full public key. Irreversible.</p>
 			<form class="flex flex-col gap-2" onsubmit={(e) => { e.preventDefault(); scrubNode(); }}>
 				<input bind:value={scrubKey} placeholder="public key (hex)" spellcheck="false" autocomplete="off" class="border-line bg-ink-2 text-fg focus:border-coral w-full rounded-xl border px-3 py-3 font-mono text-xs outline-none" />
 				<button type="submit" disabled={scrubbing || !scrubKey.trim()} class="border-coral/40 bg-coral/15 text-coral rounded-xl border px-4 py-3 text-sm font-600 disabled:opacity-50">{scrubbing ? 'Scrubbing…' : 'Scrub node'}</button>
@@ -240,5 +243,9 @@
 				{/each}
 			</div>
 		{/if}
+
+		<div class="mt-5">
+			<MembersPanel compact />
+		</div>
 	{/if}
 </div>

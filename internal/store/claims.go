@@ -34,6 +34,13 @@ type ClaimWithNode struct {
 	Claim
 	NodeName string `json:"nodeName"`
 	NodeRole string `json:"nodeRole"`
+	// NodePresent reports whether the claimed node is currently in the mesh. A
+	// claim outlives its node row: the retention sweep prunes nodes that go
+	// silent past the threshold, and the owner keeps the claim so ownership
+	// survives a repeater being down. Callers render these as dormant rather
+	// than linking to a node page that would 404. Distinguishing this from an
+	// unnamed node is why it isn't inferred from an empty NodeName.
+	NodePresent bool `json:"nodePresent"`
 }
 
 // OwnerInfo identifies the verified owner of a node (public-facing).
@@ -317,7 +324,8 @@ func (s *Store) VerifyPendingClaims(nodePubkey, advertName string) ([]Claim, err
 func (s *Store) ListUserClaims(userID int64) ([]ClaimWithNode, error) {
 	rows, err := s.db.Query(`
 		SELECT c.id, c.node_pubkey, c.user_id, c.code, c.status, c.created_at, c.expires_at,
-		       COALESCE(c.verified_at,''), COALESCE(n.name,''), COALESCE(n.role,'')
+		       COALESCE(c.verified_at,''), COALESCE(n.name,''), COALESCE(n.role,''),
+		       n.pubkey IS NOT NULL
 		FROM node_claims c LEFT JOIN nodes n ON n.pubkey = c.node_pubkey
 		WHERE c.user_id = ?
 		ORDER BY c.created_at DESC`, userID)
@@ -329,7 +337,7 @@ func (s *Store) ListUserClaims(userID int64) ([]ClaimWithNode, error) {
 	for rows.Next() {
 		var c ClaimWithNode
 		if err := rows.Scan(&c.ID, &c.NodePubkey, &c.UserID, &c.Code, &c.Status, &c.CreatedAt,
-			&c.ExpiresAt, &c.VerifiedAt, &c.NodeName, &c.NodeRole); err != nil {
+			&c.ExpiresAt, &c.VerifiedAt, &c.NodeName, &c.NodeRole, &c.NodePresent); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -386,4 +394,31 @@ func (s *Store) PruneExpiredClaims() (int64, error) {
 	s.loadPendingClaims()
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+// PartitionClaimed splits keys into those with no claim and those a user has
+// claimed (verified or pending), matching case-insensitively.
+//
+// Callers that delete node data use it to leave claimed nodes alone. A claim is
+// proof a human verified ownership over RF, so a claimed node is not a phantom
+// corruption artifact and not injected foreign traffic, however a heuristic
+// scores it — it's evidence the heuristic misfired. Deleting anyway would either
+// strand the claim on a node that can never return or destroy the owner's notes
+// and private location, neither of which an unblock can undo.
+func (s *Store) PartitionClaimed(keys []string) (unclaimed, claimed []string, err error) {
+	if len(keys) == 0 {
+		return nil, nil, nil
+	}
+	verified, err := s.ClaimedNodeKeys()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, k := range keys {
+		if verified[strings.ToUpper(k)] || s.HasPendingClaim(k) {
+			claimed = append(claimed, k)
+			continue
+		}
+		unclaimed = append(unclaimed, k)
+	}
+	return unclaimed, claimed, nil
 }

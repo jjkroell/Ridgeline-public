@@ -4,6 +4,45 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.4.0] — 2026-07-19
+
+### Added
+- **Claimed filter on the Nodes list**, showing your own nodes first and other
+  operators' after. It joins the role and favorites filters in a new filter
+  modal, replacing the row of pills that competed with the table: the header is
+  now a search field and one control that names the active filters
+  ("Repeaters · Claimed") so the constraint is legible at a glance.
+- **Member management on mobile.** `/m/admin` gained the MEMBERS panel — promote
+  or demote admins, block, unblock and remove — matching the desktop console.
+  Both now share one component.
+- **Dormant claims and shares.** A claim or location share outlives its node when
+  the retention sweep prunes a node that has gone quiet. Those rows now render
+  un-linked with a "Dormant" pill explaining the claim is kept and reconnects if
+  the node advertises again, instead of linking to a "Node not found" page.
+
+### Fixed
+- **Scrubbing a node now removes the data attached to it** — the ownership claim,
+  notes, private location and location shares. Previously they were orphaned: the
+  claim still showed in "Claimed Nodes" pointing at a node that no longer existed,
+  and it would have blocked the node from ever being re-claimed. Re-scrubbing a
+  key cleans up leftovers from earlier scrubs.
+- **The automatic retention sweep no longer deletes that data.** A node pruned for
+  going silent is expected to come back, so an operator who takes a repeater down
+  for a week keeps their claim and private location.
+- **Heuristic sweeps skip claimed nodes.** Neither the corruption-artifact scrub nor
+  the detector-driven bridge purge will delete a node someone has claimed — a claim
+  means the heuristic misfired. Purge still blocks (reversible); only the delete
+  holds back, and the console reports what it skipped.
+- **The live feed backfills after a reconnect.** A dropped WebSocket (redeploy,
+  tunnel blip, laptop sleep, backgrounded PWA) left a permanent hole: the page
+  looked connected while silently omitting everything from the outage. Channel
+  conversations would simply stop updating until reload.
+- **Nodes lists sort by the time they display.** Ordering used the last advert
+  while the "Heard" column showed the most recent advert *or* relay, so rows could
+  appear out of order.
+- **The mobile "Companions" filter matched nothing** — it filtered on a role value
+  no node reports.
+
 ## [v0.3.2] — 2026-07-17
 
 ### Added

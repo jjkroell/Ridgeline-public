@@ -158,22 +158,34 @@
 				</div>
 				<div class="divide-line/60 divide-y">
 					{#each myNodes as c (c.id)}
-						<a href="/m/nodes/{c.nodePubkey}" class="active:bg-line/40 flex items-center gap-3 px-4 py-3">
+						<!-- A claim outlives its node: retention prunes silent nodes but ownership
+						     survives, so dormant claims render un-linked instead of 404-ing. -->
+						<svelte:element
+							this={c.nodePresent ? 'a' : 'div'}
+							href={c.nodePresent ? `/m/nodes/${c.nodePubkey}` : undefined}
+							class="flex items-center gap-3 px-4 py-3 {c.nodePresent
+								? 'active:bg-line/40'
+								: 'opacity-70'}"
+						>
 							<span class="min-w-0 flex-1">
 								<span class="flex items-center gap-1.5">
 									<span class="text-fg truncate text-sm font-600">{c.nodeName || shortKey(c.nodePubkey)}</span>
 									<OwnershipIcon kind={c.status === 'verified' ? 'owned' : 'pending'} />
 								</span>
 								<span class="text-fg-faint block truncate font-mono text-xs"
-									>{shortKey(c.nodePubkey, 6, 4)}</span
+									>{c.nodePresent ? shortKey(c.nodePubkey, 6, 4) : 'not currently in the mesh'}</span
 								>
 							</span>
-							{#if c.status === 'verified'}
+							{#if !c.nodePresent}
+								<span class="border-line text-fg-dim rounded-full border px-2.5 py-1 text-xs font-600"
+									>Dormant</span
+								>
+							{:else if c.status === 'verified'}
 								<span class="bg-signal/15 text-signal rounded-full px-2.5 py-1 text-xs font-600">Owned</span>
 							{:else}
 								<span class="bg-amber/15 text-amber rounded-full px-2.5 py-1 text-xs font-600">Pending</span>
 							{/if}
-						</a>
+						</svelte:element>
 					{/each}
 				</div>
 			</div>
@@ -188,23 +200,33 @@
 				</div>
 				<div class="divide-line/60 divide-y">
 					{#each sharedWithMe as sh (sh.nodePubkey)}
-						<a
-							href="/m/nodes/{sh.nodePubkey}"
-							class="active:bg-line/40 flex items-center gap-3 px-4 py-3"
+						<!-- Shares outlive their node the same way claims do — see the My nodes list. -->
+						<svelte:element
+							this={sh.nodePresent ? 'a' : 'div'}
+							href={sh.nodePresent ? `/m/nodes/${sh.nodePubkey}` : undefined}
+							class="flex items-center gap-3 px-4 py-3 {sh.nodePresent
+								? 'active:bg-line/40'
+								: 'opacity-70'}"
 						>
 							<span class="min-w-0 flex-1">
 								<span class="flex items-center gap-1.5">
 									<span class="text-fg truncate text-sm font-600">{sh.nodeName || shortKey(sh.nodePubkey)}</span>
 									<OwnershipIcon kind="shared" sharedBy={sh.sharedByName} />
 								</span>
-								<span class="text-fg-faint block truncate text-xs"
-									>Shared by {sh.sharedByName} · {ago(sh.createdAt)}</span
-								>
+								<span class="text-fg-faint block truncate text-xs">
+									{sh.nodePresent
+										? `Shared by ${sh.sharedByName} · ${ago(sh.createdAt)}`
+										: 'not currently in the mesh'}
+								</span>
 							</span>
-							{#if !sh.seen}
+							{#if !sh.nodePresent}
+								<span class="border-line text-fg-dim rounded-full border px-2.5 py-1 text-xs font-600"
+									>Dormant</span
+								>
+							{:else if !sh.seen}
 								<span class="bg-signal text-ink rounded-full px-2.5 py-1 text-xs font-700">New</span>
 							{/if}
-						</a>
+						</svelte:element>
 					{/each}
 				</div>
 			</div>

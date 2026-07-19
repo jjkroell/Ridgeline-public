@@ -47,30 +47,47 @@
 	{:else}
 		<div class="divide-line/50 divide-y">
 			{#each mine as c (c.nodePubkey)}
-				<a href="{base}/nodes/{c.nodePubkey}" class="panel-hover flex items-center gap-3 px-5 py-2.5">
+				<!-- A claim outlives its node: retention prunes silent nodes but ownership
+				     survives, so dormant claims render un-linked instead of 404-ing. -->
+				<svelte:element
+					this={c.nodePresent ? 'a' : 'div'}
+					href={c.nodePresent ? `${base}/nodes/${c.nodePubkey}` : undefined}
+					class="flex items-center gap-3 px-5 py-2.5 {c.nodePresent ? 'panel-hover' : 'opacity-70'}"
+				>
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-1.5">
 							<span class="text-fg truncate text-sm font-medium">{c.nodeName || shortKey(c.nodePubkey)}</span>
 							<OwnershipIcon kind={c.status === 'verified' ? 'owned' : 'pending'} />
 						</div>
 						<div class="font-mono text-fg-faint mt-0.5 text-[0.68rem]">
-							{c.status === 'verified' ? 'owned' : 'claim pending'}
+							{c.nodePresent
+								? c.status === 'verified'
+									? 'owned'
+									: 'claim pending'
+								: 'not currently in the mesh'}
 						</div>
 					</div>
-					<RoleBadge role={c.nodeRole} />
-				</a>
+					{#if c.nodePresent}<RoleBadge role={c.nodeRole} />{/if}
+				</svelte:element>
 			{/each}
 			{#each shared as s (s.nodePubkey)}
-				<a href="{base}/nodes/{s.nodePubkey}" class="panel-hover flex items-center gap-3 px-5 py-2.5">
+				<!-- Shares outlive their node the same way claims do — see the mine loop. -->
+				<svelte:element
+					this={s.nodePresent ? 'a' : 'div'}
+					href={s.nodePresent ? `${base}/nodes/${s.nodePubkey}` : undefined}
+					class="flex items-center gap-3 px-5 py-2.5 {s.nodePresent ? 'panel-hover' : 'opacity-70'}"
+				>
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-1.5">
 							<span class="text-fg truncate text-sm font-medium">{s.nodeName || shortKey(s.nodePubkey)}</span>
 							<OwnershipIcon kind="shared" sharedBy={s.sharedByName} />
 						</div>
-						<div class="font-mono text-fg-faint mt-0.5 text-[0.68rem]">shared by {s.sharedByName}</div>
+						<div class="font-mono text-fg-faint mt-0.5 text-[0.68rem]">
+							{s.nodePresent ? `shared by ${s.sharedByName}` : 'not currently in the mesh'}
+						</div>
 					</div>
-					<RoleBadge role={s.nodeRole} />
-				</a>
+					{#if s.nodePresent}<RoleBadge role={s.nodeRole} />{/if}
+				</svelte:element>
 			{/each}
 		</div>
 	{/if}
