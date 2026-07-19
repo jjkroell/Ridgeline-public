@@ -28,20 +28,20 @@ func advertPkt(pubkey string, path ...string) *meshcore.Packet {
 
 func TestBlocklistShouldDrop(t *testing.T) {
 	st := testStore(t)
-	bridge := "3FDCCE5715F97C7701DF03C3D5DE0CC1EE08A637F24E944316791C628B728F67"
-	foreign := "89AFE58A97AD541D915ED00890CAAAD09E09AD038F9B62BD3C651A0D754F0256"
+	bridge := "AB11223344556677889900AABBCCDDEEFF00112233445566778899AABBCCDDEE"
+	foreign := "CD99887766554433221100FFEEDDCCBBAA99887766554433221100FFEEDDCCBB"
 
 	// Nothing blocked yet.
-	if st.ShouldDrop(advertPkt(foreign, "3F", "16"), "obs-A") {
+	if st.ShouldDrop(advertPkt(foreign, "AB", "16"), "obs-A") {
 		t.Fatal("dropped with empty blocklist")
 	}
 
 	// Block the bridge -> any packet whose path transits its prefix is dropped.
-	if err := st.AddBlock(BlockBridge, bridge, "Dager-Mesh-Repeater", "rf bridge"); err != nil {
+	if err := st.AddBlock(BlockBridge, bridge, "Bridge Repeater", "rf bridge"); err != nil {
 		t.Fatal(err)
 	}
-	if !st.ShouldDrop(advertPkt(foreign, "3F", "16"), "obs-A") {
-		t.Error("foreign packet via bridge prefix 3F not dropped")
+	if !st.ShouldDrop(advertPkt(foreign, "AB", "16"), "obs-A") {
+		t.Error("foreign packet via bridge prefix AB not dropped")
 	}
 	if !st.ShouldDrop(advertPkt(bridge), "obs-A") { // bridge's own advert
 		t.Error("bridge's own advert not dropped")
@@ -65,7 +65,7 @@ func TestBlocklistShouldDrop(t *testing.T) {
 	if err := st.RemoveBlock(BlockBridge, bridge); err != nil {
 		t.Fatal(err)
 	}
-	if st.ShouldDrop(advertPkt(foreign, "3F", "16"), "obs-A") {
+	if st.ShouldDrop(advertPkt(foreign, "AB", "16"), "obs-A") {
 		t.Error("still dropping after bridge unblocked")
 	}
 	if st.IsNodeBlocked(bridge) {
