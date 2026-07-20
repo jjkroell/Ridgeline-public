@@ -4,6 +4,24 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.5.5] — 2026-07-20
+
+### Fixed
+- **A trace's header path is no longer counted as relay hops.** Trace packets
+  are not shaped like the rest: their header path carries one signed SNR
+  reading per hop rather than a list of relay hashes, and the route being
+  traced lives in the payload, sized independently. Those SNR bytes are
+  indistinguishable from 1-byte hop hashes, so every path walker was reading
+  them as relays — on a live mesh, 40% of them coincidentally matched a known
+  node's prefix, inventing a relay that never carried the packet and adjacency
+  between nodes that were never neighbours. This fed relay counts, neighbour
+  resolution, the activity heatmap, mesh topology, node history, observer
+  direct-link detection and bridge detection; it also let a phantom hop keep a
+  silent node alive through the retention sweep, and could drop a packet that
+  never crossed a quarantined bridge. Trace is a small share of traffic, so
+  mesh-wide conclusions are unchanged — the correction is per-node: a node no
+  longer shows a relay it never performed.
+
 ## [v0.5.4] — 2026-07-20
 
 ### Fixed

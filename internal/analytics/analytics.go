@@ -243,8 +243,8 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 
 		// Per-transmission representative path (newest seen, since rows are DESC).
 		if _, ok := txPaths[hash]; !ok {
-			resolved := make([]string, 0, len(pkt.Path))
-			for _, hop := range pkt.Path {
+			resolved := make([]string, 0, len(pkt.RelayPath()))
+			for _, hop := range pkt.RelayPath() {
 				if pk := resolve(hop); pk != "" {
 					resolved = append(resolved, pk)
 				}

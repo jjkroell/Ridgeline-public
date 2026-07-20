@@ -63,7 +63,7 @@ func NodeHistory(st *store.Store, nodes []store.Node, pubkey, sinceISO string, s
 			out = append(out, historyEntry(pkt, ro, "advert", 0))
 			continue
 		}
-		for i, hop := range pkt.Path {
+		for i, hop := range pkt.RelayPath() {
 			if strings.ToUpper(resolve(hop)) == pubkey {
 				out = append(out, historyEntry(pkt, ro, "relay", i))
 				break

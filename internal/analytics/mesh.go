@@ -246,7 +246,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 		} else if t := txs[pkt.MessageHash]; !recv.IsZero() && (t.firstSeen.IsZero() || recv.Before(t.firstSeen)) {
 			t.firstSeen = recv
 		}
-		if len(pkt.Path) > 0 {
+		if len(pkt.RelayPath()) > 0 {
 			txs[pkt.MessageHash].relayed = true
 		}
 
@@ -261,7 +261,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 				}
 				advHeard[ro.ObserverID][origin] = true
 				// Zero-hop = direct RF range between observer and node.
-				if len(pkt.Path) == 0 {
+				if len(pkt.RelayPath()) == 0 {
 					if directLink[ro.ObserverID] == nil {
 						directLink[ro.ObserverID] = map[string]int{}
 					}
@@ -270,7 +270,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 			}
 		}
 		var seq []string
-		for _, hop := range pkt.Path {
+		for _, hop := range pkt.RelayPath() {
 			rk := strings.ToUpper(resolve(hop))
 			if rk == "" {
 				continue

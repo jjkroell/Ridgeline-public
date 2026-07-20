@@ -40,7 +40,7 @@ func NodeHeatmap(st *store.Store, nodes []store.Node, pubkey, sinceISO string, s
 		}
 		mine := pkt.Advert != nil && strings.ToUpper(pkt.Advert.PublicKey) == pubkey
 		if !mine {
-			for _, hop := range pkt.Path {
+			for _, hop := range pkt.RelayPath() {
 				if strings.ToUpper(resolve(hop)) == pubkey {
 					mine = true
 					break

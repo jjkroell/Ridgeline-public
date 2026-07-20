@@ -99,7 +99,7 @@ func (s *Store) ShouldDrop(p *meshcore.Packet, observerID string) bool {
 	if p.Advert != nil && p.Advert.PublicKey != "" && s.blockedNodes[strings.ToUpper(p.Advert.PublicKey)] {
 		return true
 	}
-	for _, hop := range p.Path {
+	for _, hop := range p.RelayPath() {
 		if hop == "" {
 			continue
 		}
@@ -295,7 +295,7 @@ func (s *Store) purgeTargets(observers, bridges, nodes []string, cascadeUserData
 			continue
 		}
 		if len(bridgeSet) > 0 {
-			if hit := pathHitsBridge(pkt.Path, bridgeSet); hit {
+			if hit := pathHitsBridge(pkt.RelayPath(), bridgeSet); hit {
 				delIDs = append(delIDs, id)
 			}
 		}

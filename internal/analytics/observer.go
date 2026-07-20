@@ -97,7 +97,7 @@ func ObserverSummary(st *store.Store, nodes []store.Node, id, sinceISO string, s
 		if pkt.Advert != nil && pkt.Advert.PublicKey != "" {
 			origin := strings.ToUpper(pkt.Advert.PublicKey)
 			advHeard[origin] = true
-			if len(pkt.Path) == 0 {
+			if len(pkt.RelayPath()) == 0 {
 				directCount[origin]++
 			}
 		}

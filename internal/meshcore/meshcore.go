@@ -193,6 +193,30 @@ type Packet struct {
 	Errors     []string
 }
 
+// RelayPath returns the header path interpreted as relay hop identifiers, or
+// nil when the header path does not describe relays at all.
+//
+// For a TRACE packet the header path is NOT a list of relay hashes: it carries
+// one signed SNR reading per hop (int8, quarter-dB). Those bytes are
+// indistinguishable from 1-byte hop hashes by inspection, and on a real mesh
+// roughly 40% of them coincidentally match some known node's prefix — so
+// treating them as a path invents relays that never carried the packet, and
+// invents adjacency between nodes that were never neighbours.
+//
+// A trace's actual route is carried in its payload (Trace.Path), sized
+// independently of the header. Use that if you want the traced route; it is
+// deliberately NOT returned here, because it describes the route being probed
+// rather than the hops this copy travelled.
+//
+// Callers that want the raw header bytes whatever the payload type (the packet
+// inspector, which renders trace SNR from them) should read Path directly.
+func (p *Packet) RelayPath() []string {
+	if p.PayloadType == PayloadTrace {
+		return nil
+	}
+	return p.Path
+}
+
 // DirectMessage is the cleartext envelope shared by TextMessage (0x02),
 // Request (0x00), and Response (0x01) payloads: a 1-byte destination hash, a
 // 1-byte source hash, a 2-byte cipher MAC, and the encrypted body. The body

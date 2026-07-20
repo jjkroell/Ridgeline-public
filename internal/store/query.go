@@ -403,7 +403,7 @@ func (s *Store) RelayHopPrefixesSince(sinceISO string) (map[string]bool, error) 
 		if err != nil || pkt == nil {
 			continue
 		}
-		for _, hop := range pkt.Path {
+		for _, hop := range pkt.RelayPath() {
 			if hop != "" {
 				set[strings.ToUpper(hop)] = true
 			}

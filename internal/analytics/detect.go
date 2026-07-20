@@ -249,12 +249,15 @@ func DetectInjection(st *store.Store, nodes []store.Node, sinceISO string, scanC
 		}
 		packets++
 
-		// --- Path facts: every payload type contributes. ---
-		if len(pkt.Path) > 0 {
+		// --- Path facts: every payload type that HAS a relay path contributes.
+		// RelayPath is empty for a trace, whose header path is per-hop SNR rather
+		// than relay hashes. ---
+		relayPath := pkt.RelayPath()
+		if len(relayPath) > 0 {
 			pathed++
 			prev := ""
 			carried := map[string]bool{}
-			for _, h := range pkt.Path {
+			for _, h := range relayPath {
 				k := resolve(h)
 				if k == "" {
 					// An ambiguous hash prefix is UNKNOWN, not absent: it breaks the
@@ -277,7 +280,7 @@ func DetectInjection(st *store.Store, nodes []store.Node, sinceISO string, scanC
 				}
 				prev = ku
 			}
-			if last := resolve(pkt.Path[len(pkt.Path)-1]); last != "" {
+			if last := resolve(relayPath[len(relayPath)-1]); last != "" {
 				terminalCount[strings.ToUpper(last)]++
 			}
 		}
@@ -303,7 +306,7 @@ func DetectInjection(st *store.Store, nodes []store.Node, sinceISO string, scanC
 			}
 			reporters[origin][ro.ObserverID] = true
 		}
-		if len(pkt.Path) == 0 {
+		if len(pkt.RelayPath()) == 0 {
 			if ro.ReceivedAt > lastDirect[origin] {
 				lastDirect[origin] = ro.ReceivedAt
 				relayedSince[origin] = 0 // heard directly again: it is local now
@@ -321,7 +324,7 @@ func DetectInjection(st *store.Store, nodes []store.Node, sinceISO string, scanC
 		}
 		obsTotal[origin]++
 		seen := map[string]bool{} // dedupe relays within this one observation
-		for _, h := range pkt.Path {
+		for _, h := range pkt.RelayPath() {
 			k := resolve(h)
 			if k == "" {
 				continue
