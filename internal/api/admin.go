@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jjkroell/ridgeline/internal/analytics"
@@ -175,6 +176,60 @@ func (s *Server) adminDelete(w http.ResponseWriter, r *http.Request, _ store.Use
 		"claimsDeleted", res.Claims, "notesDeleted", res.Notes,
 		"locationsDeleted", res.Locations, "sharesDeleted", res.Shares)
 	writeJSON(w, res)
+}
+
+// adminRetiredObservers lists the observers currently withdrawn from the
+// observers page.
+func (s *Server) adminRetiredObservers(w http.ResponseWriter, _ *http.Request, _ store.User) {
+	obs, err := s.store.ListRetiredObservers()
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, obs)
+}
+
+// adminRetireObserver withdraws a decommissioned observer from the observers
+// page while keeping every packet it reported.
+//
+// This is the non-destructive counterpart to POST /api/admin/delete, which runs
+// ScrubNodes and deletes the observer's observations outright. Retiring is the
+// right action for a receiver that has simply left the network: its history
+// stays attributable to it, and the retirement survives the broker replaying
+// its retained /status message.
+func (s *Server) adminRetireObserver(w http.ResponseWriter, r *http.Request, _ store.User) {
+	s.setObserverRetired(w, r, true)
+}
+
+// adminUnretireObserver returns a retired observer to the observers page.
+func (s *Server) adminUnretireObserver(w http.ResponseWriter, r *http.Request, _ store.User) {
+	s.setObserverRetired(w, r, false)
+}
+
+func (s *Server) setObserverRetired(w http.ResponseWriter, r *http.Request, retire bool) {
+	var req struct {
+		Observer string `json:"observer"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request body")
+		return
+	}
+	if strings.TrimSpace(req.Observer) == "" {
+		writeErr(w, http.StatusBadRequest, "observer required")
+		return
+	}
+	var err error
+	if retire {
+		err = s.store.RetireObserver(req.Observer, time.Now().UTC().Format(time.RFC3339))
+	} else {
+		err = s.store.UnretireObserver(req.Observer)
+	}
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.log.Info("admin observer retirement", "observer", req.Observer, "retired", retire)
+	writeJSON(w, map[string]any{"observer": req.Observer, "retired": retire})
 }
 
 func validKind(k string) bool {

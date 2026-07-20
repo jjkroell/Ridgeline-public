@@ -283,6 +283,11 @@ func Open(path string) (*Store, error) {
 	// prev_owner_name records a node's last verified owner after they delete their
 	// account, so the public page can show "previously owned by …".
 	db.Exec(`ALTER TABLE nodes ADD COLUMN prev_owner_name TEXT`)
+	// Retiring an observer hides it from the observers page without touching the
+	// packets it reported — a decommissioned receiver stops being presented as
+	// part of the network while its history stays attributable to it. NULL means
+	// active; a retirement stamps the RFC3339 time it was retired.
+	db.Exec(`ALTER TABLE observers ADD COLUMN retired_at TEXT`)
 	// User account status columns (added after the initial users table shipped).
 	db.Exec(`ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE users ADD COLUMN protected INTEGER NOT NULL DEFAULT 0`)
@@ -339,6 +344,56 @@ func (s *Store) UpsertObserverStatus(id, region, pubkey, statusJSON, radio, rece
 	return err
 }
 
+// RetireObserver hides an observer from the observers page without deleting
+// anything it reported. Retiring KEEPS the row on purpose: a retained /status
+// message replayed by the broker takes the ON CONFLICT branch of
+// UpsertObserverStatus and leaves retired_at alone, so the observer stays
+// hidden. Deleting the row instead would let that same replay re-INSERT it with
+// a fresh first_seen/last_seen — which is exactly how decommissioned observers
+// used to keep coming back.
+func (s *Store) RetireObserver(id, at string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE observers SET retired_at = ? WHERE id = ?`, at, id)
+	return err
+}
+
+// UnretireObserver returns a retired observer to the observers page.
+func (s *Store) UnretireObserver(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE observers SET retired_at = NULL WHERE id = ?`, id)
+	return err
+}
+
+// UpdateObserverStatusIfPresent refreshes an existing observer's status without
+// ever creating a row, and reports whether one was updated.
+//
+// This is the path for RETAINED status messages. Observers publish /status with
+// the retain flag, and the broker replays that message to the daemon on every
+// reconnect — for as long as it exists, whether or not the device is still on
+// the air. Feeding a replay through UpsertObserverStatus would INSERT a row for
+// a decommissioned observer, stamping first_seen/last_seen with the reconnect
+// time and resurrecting it on the observers page. A retained status is a stale
+// last-known value, never evidence the device is live, so it may refresh an
+// observer that already exists but must not conjure one.
+func (s *Store) UpdateObserverStatusIfPresent(id, region, pubkey, statusJSON, radio, receivedAt string) (bool, error) {
+	res, err := s.db.Exec(`
+		UPDATE observers SET
+			status_json    = ?,
+			last_status_at = ?,
+			radio          = COALESCE(NULLIF(?,''), radio),
+			region         = COALESCE(NULLIF(?,''), region),
+			pubkey         = COALESCE(NULLIF(?,''), pubkey)
+		WHERE id = ?`,
+		statusJSON, receivedAt, radio, region, pubkey, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // DeleteStaleObservers removes observer rows whose last_seen is older than the
 // given RFC3339 cutoff, returning the ids removed. Only the observers row is
 // deleted — the observations (packets) it reported, and its telemetry history,
@@ -346,11 +401,15 @@ func (s *Store) UpsertObserverStatus(id, region, pubkey, statusJSON, radio, rece
 // observer reappears the moment it publishes again (its next packet or status
 // re-creates the row), so this only clears observers that have genuinely gone
 // silent.
+//
+// Retired observers are skipped: their row is deliberately kept so replayed
+// retained status messages can't re-INSERT them (see RetireObserver), and
+// sweeping it away would undo the retirement.
 func (s *Store) DeleteStaleObservers(cutoff string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT id FROM observers WHERE last_seen < ?`, cutoff)
+	rows, err := s.db.Query(`SELECT id FROM observers WHERE last_seen < ? AND retired_at IS NULL`, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +429,7 @@ func (s *Store) DeleteStaleObservers(cutoff string) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	if _, err := s.db.Exec(`DELETE FROM observers WHERE last_seen < ?`, cutoff); err != nil {
+	if _, err := s.db.Exec(`DELETE FROM observers WHERE last_seen < ? AND retired_at IS NULL`, cutoff); err != nil {
 		return nil, err
 	}
 	return ids, nil

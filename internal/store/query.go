@@ -118,7 +118,9 @@ func (s *Store) Stats() (Stats, error) {
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM nodes`).Scan(&st.Nodes); err != nil {
 		return st, err
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM observers`).Scan(&st.Observers); err != nil {
+	// Retired observers are excluded so this agrees with the observers page,
+	// which lists only the active ones.
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM observers WHERE retired_at IS NULL`).Scan(&st.Observers); err != nil {
 		return st, err
 	}
 	var last *string
@@ -146,6 +148,8 @@ type Observer struct {
 	PacketCount  int             `json:"packetCount"`
 	Status       *ObserverStatus `json:"status,omitempty"`
 	LastStatusAt string          `json:"lastStatusAt,omitempty"`
+	// RetiredAt is set on decommissioned observers, which ListObservers omits.
+	RetiredAt string `json:"retiredAt,omitempty"`
 }
 
 // ObserverStatus is an observer's latest self-reported device telemetry, parsed
@@ -169,15 +173,28 @@ type ObserverStatus struct {
 	QueueLen        *int     `json:"queueLen,omitempty"`
 }
 
-// ListObservers returns all observers, most recently active first, with a
+// ListObservers returns the ACTIVE observers, most recently active first, with a
 // location joined from the nodes table when the observer's key has advertised.
+// Retired (decommissioned) observers are omitted — see ListRetiredObservers.
 func (s *Store) ListObservers() ([]Observer, error) {
+	return s.listObservers(`o.retired_at IS NULL`)
+}
+
+// ListRetiredObservers returns the observers that have been retired, most
+// recently retired first. Their observations are untouched and still counted
+// everywhere; only their presence on the observers page is withdrawn.
+func (s *Store) ListRetiredObservers() ([]Observer, error) {
+	return s.listObservers(`o.retired_at IS NOT NULL`)
+}
+
+func (s *Store) listObservers(where string) ([]Observer, error) {
 	rows, err := s.db.Query(`
 		SELECT o.id, COALESCE(o.region,''), COALESCE(o.pubkey,''),
 		       n.latitude, n.longitude, o.first_seen, o.last_seen, o.packet_count,
-		       o.status_json, COALESCE(o.last_status_at,'')
+		       o.status_json, COALESCE(o.last_status_at,''), COALESCE(o.retired_at,'')
 		FROM observers o
 		LEFT JOIN nodes n ON n.pubkey = o.pubkey
+		WHERE ` + where + `
 		ORDER BY o.last_seen DESC`)
 	if err != nil {
 		return nil, err
@@ -190,7 +207,7 @@ func (s *Store) ListObservers() ([]Observer, error) {
 		var statusJSON *string
 		if err := rows.Scan(&o.ID, &o.Region, &o.PublicKey,
 			&o.Latitude, &o.Longitude, &o.FirstSeen, &o.LastSeen, &o.PacketCount,
-			&statusJSON, &o.LastStatusAt); err != nil {
+			&statusJSON, &o.LastStatusAt, &o.RetiredAt); err != nil {
 			return nil, err
 		}
 		if statusJSON != nil && *statusJSON != "" {

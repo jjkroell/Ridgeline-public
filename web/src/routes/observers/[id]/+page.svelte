@@ -51,8 +51,33 @@
 		return () => clearInterval(t);
 	});
 
-	// Admin-only: retire a stale/old observer — deletes its row + stored
-	// observations (no block; re-appears if it publishes again).
+	// Admin-only: retire a decommissioned observer. Withdraws it from the
+	// observers page and keeps every packet it reported, so its history stays
+	// attributable. Reversible, and it survives the broker replaying the
+	// observer's retained /status — which is what used to resurrect observers
+	// that had merely been deleted.
+	let retiring = $state(false);
+	async function retireObserver() {
+		if (
+			!(await confirmer.ask({
+				title: `Retire observer "${id}"?`,
+				message:
+					'Removes it from the observers page. Every packet it reported is kept, and stays attributed to it in history. You can un-retire it later.',
+				confirmLabel: 'Retire observer'
+			}))
+		)
+			return;
+		retiring = true;
+		try {
+			await admin.retireObserver(auth.csrf, id);
+			goto('/observers');
+		} catch (e) {
+			retiring = false;
+			await confirmer.tell({ title: 'Retire failed', message: (e as Error).message });
+		}
+	}
+
+	// Admin-only: permanently delete the observer AND every packet it reported.
 	let deleting = $state(false);
 	async function deleteObserver() {
 		if (
@@ -176,10 +201,17 @@
 		{/if}
 		<WindowToggle options={windows} bind:value={windowSec} />
 		{#if auth.isAdmin}
-			<Tooltip text="Permanently delete this observer and its stored packets">
+			<Tooltip text="Withdraw this observer from the observers page but keep every packet it reported. Reversible.">
+				<button
+					onclick={retireObserver}
+					disabled={retiring || deleting}
+					class="border-fg-faint/40 text-fg-dim hover:bg-fg-faint/10 hover:text-fg rounded-[var(--radius)] border px-3 py-1 text-xs font-600 transition-colors disabled:opacity-50"
+				>{retiring ? 'Retiring…' : 'Retire observer'}</button>
+			</Tooltip>
+			<Tooltip text="Permanently delete this observer AND every packet it reported. Prefer Retire for a receiver that has simply left the network.">
 				<button
 					onclick={deleteObserver}
-					disabled={deleting}
+					disabled={retiring || deleting}
 					class="border-coral/40 text-coral hover:bg-coral/15 rounded-[var(--radius)] border px-3 py-1 text-xs font-600 transition-colors disabled:opacity-50"
 				>{deleting ? 'Deleting…' : 'Delete observer'}</button>
 			</Tooltip>

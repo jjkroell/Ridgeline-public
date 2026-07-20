@@ -11,6 +11,7 @@
 	} from '$lib/api';
 	import { ago, purgeCascade, roleColor, roleLabel, skippedNote } from '$lib/format';
 	import MembersPanel from '$lib/components/MembersPanel.svelte';
+	import RetiredObserversPanel from '$lib/components/RetiredObserversPanel.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import WindowToggle from '$lib/components/WindowToggle.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
@@ -707,5 +708,6 @@
 		{/if}
 
 		<MembersPanel />
+		<RetiredObserversPanel />
 	{/if}
 </div>

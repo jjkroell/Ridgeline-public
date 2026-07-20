@@ -271,6 +271,21 @@ func (in *Ingestor) handleStatus(msg mqtt.Message) {
 		pubkey = observerKey
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
+	// A retained status is the broker replaying an observer's last known value on
+	// every reconnect, not a live sighting — it may refresh an observer we already
+	// know, but it must never create one, or decommissioned observers reappear.
+	// Returning early also skips the telemetry append below: stamping a replayed
+	// battery/noise reading with the reconnect time invents a data point that was
+	// never measured, one per reconnect, for as long as the retained message lives.
+	if msg.Retained() {
+		found, err := in.store.UpdateObserverStatusIfPresent(observerID, region, pubkey, string(b), env.Radio, now)
+		if err != nil {
+			in.log.Error("update observer status failed", "err", err)
+		} else if !found {
+			in.log.Debug("ignored retained status for unknown observer", "observer", observerID)
+		}
+		return
+	}
 	if err := in.store.UpsertObserverStatus(observerID, region, pubkey, string(b), env.Radio, now); err != nil {
 		in.log.Error("store observer status failed", "err", err)
 	}

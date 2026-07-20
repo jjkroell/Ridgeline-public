@@ -64,6 +64,9 @@ export interface Observer {
 	/** Latest self-reported device telemetry from the observer's /status message. */
 	status?: ObserverStatus;
 	lastStatusAt?: string;
+	/** Set once retired (decommissioned). Retired observers are omitted from the
+	 *  observers list; their packets stay attributed to them. */
+	retiredAt?: string;
 }
 
 export interface Observation {
@@ -444,10 +447,28 @@ export const admin = {
 	/** Permanently delete nodes (adverts + rows) with no blocklist entry. */
 	deleteNodes: (csrf: string, nodes: string[]) =>
 		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { nodes }),
-	/** Permanently delete observers (row + their stored observations) with no block —
-	 *  for retiring stale/old observers. Re-appears if it publishes again. */
+	/** Permanently delete observers AND every packet they reported, with no block.
+	 *  Destructive — prefer `retireObserver` for a receiver that has simply left
+	 *  the network, which keeps its history. */
 	deleteObservers: (csrf: string, observers: string[]) =>
-		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { observers })
+		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { observers }),
+	/** Observers withdrawn from the observers page but whose packets are kept. */
+	retiredObservers: () => get<Observer[]>('/api/admin/observers/retired'),
+	/** Retire a decommissioned observer: hides it from the observers page and
+	 *  keeps every packet it reported. Survives the broker replaying its retained
+	 *  /status, which is what used to bring deleted observers back. Reversible. */
+	retireObserver: (csrf: string, observer: string) =>
+		mutate<{ observer: string; retired: boolean }>('/api/admin/observers/retire', 'POST', csrf, {
+			observer
+		}),
+	/** Return a retired observer to the observers page. */
+	unretireObserver: (csrf: string, observer: string) =>
+		mutate<{ observer: string; retired: boolean }>(
+			'/api/admin/observers/unretire',
+			'POST',
+			csrf,
+			{ observer }
+		)
 };
 
 export const api = {

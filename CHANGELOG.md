@@ -4,6 +4,32 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.5.1] — 2026-07-19
+
+Decommissioned observers no longer come back from the dead.
+
+### Fixed
+- **A retired observer stays retired.** Observers publish their `/status` with
+  the MQTT retain flag, so the broker keeps that message and replays it to the
+  daemon on *every* reconnect — for as long as it exists, whether or not the
+  device is still on the air. The daemon treated a replay as a live sighting and
+  re-created the observer, which is why one removed from the observers page
+  reappeared after the next restart or redeploy. A retained status is a stale
+  last-known value: it may now refresh an observer that already exists, but it
+  can never create one.
+- **No more invented telemetry.** The same replay appended a battery/noise
+  sample stamped with the reconnect time — a reading that was never taken, one
+  per reconnect, for as long as the retained message lived.
+- **The observer count on the dashboard** now agrees with the observers page.
+
+### Added
+- **Retire an observer** instead of deleting it. Retiring withdraws a
+  decommissioned receiver from the observers page and keeps every packet it
+  reported, still attributed to it in history. Deleting an observer removes its
+  packets too, which quietly rewrites the record — retiring is the right action
+  for a receiver that has simply left the network. Reversible from the admin
+  console, on desktop and mobile.
+
 ## [v0.5.0] — 2026-07-19
 
 RF bridge detection, rebuilt. The previous detector could not find a live bridge

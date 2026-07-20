@@ -5,6 +5,7 @@
 	import { admin, type InjectionReport, type BlockEntry, type BridgeCandidate, type InjectorCandidate } from '$lib/api';
 	import { purgeCascade, roleColor, skippedNote } from '$lib/format';
 	import MembersPanel from '$lib/components/MembersPanel.svelte';
+	import RetiredObserversPanel from '$lib/components/RetiredObserversPanel.svelte';
 
 	// Gated by the signed-in account's is_admin flag (no static token). Bounce
 	// non-admins once the /me probe resolves.
@@ -318,6 +319,7 @@
 
 		<div class="mt-5">
 			<MembersPanel compact />
+			<RetiredObserversPanel compact />
 		</div>
 	{/if}
 </div>
