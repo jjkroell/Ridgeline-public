@@ -96,7 +96,7 @@
 		let earliest = g.events[0];
 		for (const e of g.events)
 			if (+new Date(e.receivedAt) < +new Date(earliest.receivedAt)) earliest = e;
-		return earliest.observerId ?? '—';
+		return earliest.observerName ?? earliest.observerId ?? '—';
 	}
 
 	/** Cap a label at 15 chars with a trailing ellipsis. */

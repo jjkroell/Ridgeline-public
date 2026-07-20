@@ -56,7 +56,7 @@
 				>
 					<div class="flex items-start justify-between">
 						<div class="min-w-0">
-							<div class="font-mono text-fg truncate text-sm font-bold">{o.id}</div>
+							<div class="text-fg truncate text-sm font-bold">{o.name ?? o.id}</div>
 							{#if o.region}
 								<div class="label mt-1">{o.region}</div>
 							{/if}

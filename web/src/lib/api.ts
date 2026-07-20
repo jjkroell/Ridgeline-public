@@ -56,7 +56,10 @@ export interface ObserverStatus {
 }
 
 export interface Observer {
+	/** Stable identity — the observer's public key. Use `name` for display. */
 	id: string;
+	/** Operator-chosen label. Falls back to `id` when absent. */
+	name?: string;
 	region: string;
 	firstSeen: string;
 	lastSeen: string;
@@ -75,6 +78,8 @@ export interface Observation {
 	payloadType: string;
 	pathHops: number;
 	observerId?: string;
+	/** Friendly label for observerId, resolved server-side. */
+	observerName?: string;
 	region?: string;
 	snr?: number;
 	rssi?: number;
@@ -108,7 +113,10 @@ export interface LiveEvent extends Observation {
 
 // --- Per-node analytics (GET /api/nodes/{pubkey}) ---
 export interface NodeObserverStat {
+	/** Stable identity — the observer's public key. Use `name` for display. */
 	id: string;
+	/** Operator-chosen label. Falls back to `id` when absent. */
+	name?: string;
 	region?: string;
 	count: number;
 	avgSnr?: number;
@@ -125,6 +133,8 @@ export interface NodePacketRef {
 	payloadType: string;
 	receivedAt: string;
 	observerId?: string;
+	/** Friendly label for observerId, resolved server-side. */
+	observerName?: string;
 	snr?: number;
 	rssi?: number;
 	pathHops: number;
@@ -173,6 +183,8 @@ export interface NodeHistoryEntry {
 	kind: 'advert' | 'relay';
 	receivedAt: string;
 	observerId?: string;
+	/** Friendly label for observerId, resolved server-side. */
+	observerName?: string;
 	region?: string;
 	snr?: number;
 	rssi?: number;
@@ -238,6 +250,7 @@ export interface RelayRank {
 }
 export interface ObserverCoverage {
 	id: string;
+	name?: string;
 	region?: string;
 	observations: number;
 	distinctNodes: number;
@@ -247,6 +260,7 @@ export interface ObserverCoverage {
 }
 export interface DirectLink {
 	observer: string;
+	observerName?: string;
 	nodeKey: string;
 	nodeName: string;
 	role: string;

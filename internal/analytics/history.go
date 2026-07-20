@@ -13,17 +13,20 @@ import (
 // hop in the path. Unlike the analytics snapshot (a fixed rolling window), this
 // is an on-demand query that can span any time range the store retains.
 type HistoryEntry struct {
-	MessageHash string   `json:"messageHash"`
-	PayloadType string   `json:"payloadType"`
-	RouteType   string   `json:"routeType"`
-	Kind        string   `json:"kind"` // "advert" (sent by the node) | "relay" (forwarded by it)
-	ReceivedAt  string   `json:"receivedAt"`
-	ObserverID  string   `json:"observerId,omitempty"`
-	Region      string   `json:"region,omitempty"`
-	SNR         *float64 `json:"snr,omitempty"`
-	RSSI        *float64 `json:"rssi,omitempty"`
-	PathHops    int      `json:"pathHops"`
-	HopIndex    int      `json:"hopIndex"` // relay only: 0-based position of the node in the path
+	MessageHash string `json:"messageHash"`
+	PayloadType string `json:"payloadType"`
+	RouteType   string `json:"routeType"`
+	Kind        string `json:"kind"` // "advert" (sent by the node) | "relay" (forwarded by it)
+	ReceivedAt  string `json:"receivedAt"`
+	// ObserverID is the observer's stable identity (its public key);
+	// ObserverName is the label to show.
+	ObserverID   string   `json:"observerId,omitempty"`
+	ObserverName string   `json:"observerName,omitempty"`
+	Region       string   `json:"region,omitempty"`
+	SNR          *float64 `json:"snr,omitempty"`
+	RSSI         *float64 `json:"rssi,omitempty"`
+	PathHops     int      `json:"pathHops"`
+	HopIndex     int      `json:"hopIndex"` // relay only: 0-based position of the node in the path
 }
 
 // NodeHistory scans stored observations received at or after sinceISO (newest
@@ -65,6 +68,12 @@ func NodeHistory(st *store.Store, nodes []store.Node, pubkey, sinceISO string, s
 				out = append(out, historyEntry(pkt, ro, "relay", i))
 				break
 			}
+		}
+	}
+	// Entries carry the observer's stable id; attach the label for display.
+	if names, err := st.ObserverNames(); err == nil {
+		for i := range out {
+			out[i].ObserverName = names[out[i].ObserverID]
 		}
 	}
 	return out, nil
@@ -118,9 +127,13 @@ func NodeObservers(st *store.Store, nodes []store.Node, pubkey, sinceISO string,
 		}
 	}
 
+	names, err := st.ObserverNames()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]ObserverStat, 0, len(byObs))
 	for id, a := range byObs {
-		os := ObserverStat{ID: id, Region: a.region, Count: a.count}
+		os := ObserverStat{ID: id, Name: names[id], Region: a.region, Count: a.count}
 		if a.snrN > 0 {
 			v := a.snrSum / float64(a.snrN)
 			os.AvgSNR = &v

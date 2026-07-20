@@ -60,7 +60,7 @@
 	async function retireObserver() {
 		if (
 			!(await confirmer.ask({
-				title: `Retire observer "${id}"?`,
+				title: `Retire observer "${observer?.name ?? id}"?`,
 				message:
 					'Removes it from the observers page. Every packet it reported is kept, and stays attributed to it in history. You can un-retire it later.',
 				confirmLabel: 'Retire observer'
@@ -82,7 +82,7 @@
 	async function deleteObserver() {
 		if (
 			!(await confirmer.ask({
-				title: `Delete observer "${id}"?`,
+				title: `Delete observer "${observer?.name ?? id}"?`,
 				message:
 					'This permanently removes the observer, every packet it reported, and its battery/noise history. This cannot be undone. To take it off this page but keep its history, use Retire instead.',
 				confirmLabel: 'Delete observer',
@@ -193,7 +193,7 @@
 	const maxNbr = $derived(Math.max(1, ...(data?.neighbors ?? []).map((n) => n.count)));
 </script>
 
-<PageHeader eyebrow="Listening Post" title={id}>
+<PageHeader eyebrow="Listening Post" title={observer?.name ?? id}>
 	<div class="flex items-center gap-3">
 		{#if observer}
 			<Tooltip text={isFresh(observer.lastSeen) ? 'reporting' : 'silent'}>

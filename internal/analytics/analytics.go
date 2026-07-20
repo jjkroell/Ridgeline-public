@@ -16,7 +16,10 @@ import (
 
 // ObserverStat is one observer's reception of a node's adverts.
 type ObserverStat struct {
+	// ID is the observer's stable identity (its public key); Name is the label to
+	// show. Name is empty when no observer row resolves the id.
 	ID      string   `json:"id"`
+	Name    string   `json:"name,omitempty"`
 	Region  string   `json:"region,omitempty"`
 	Count   int      `json:"count"`
 	AvgSNR  *float64 `json:"avgSnr,omitempty"`
@@ -143,6 +146,17 @@ func (e *Engine) Recompute(st *store.Store, nodes []store.Node) error {
 		return err
 	}
 	details := build(raws, nodes, e.windowHours, advertCutoff)
+	// Observations carry the observer's stable id (its public key); attach the
+	// friendly label so callers don't each have to resolve it.
+	if names, err := st.ObserverNames(); err == nil {
+		for _, d := range details {
+			for i := range d.Observers {
+				if n := names[d.Observers[i].ID]; n != "" {
+					d.Observers[i].Name = n
+				}
+			}
+		}
+	}
 	e.mu.Lock()
 	e.details = details
 	e.generatedAt = time.Now()

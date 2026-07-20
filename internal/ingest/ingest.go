@@ -152,11 +152,16 @@ func (in *Ingestor) handle(_ mqtt.Client, msg mqtt.Message) {
 	if region == "" {
 		region = env.Region
 	}
-	// Prefer the friendly observer name for display; fall back to the
-	// topic-derived public key.
-	observerID := env.Origin
+	// The public key identifies the observer; the friendly name is a label the
+	// operator can change at any time, so it must not be the identity. The topic
+	// carries the key on every message, and env.OriginID repeats it; fall back to
+	// the name only when neither is present.
+	observerID, observerName := observerKey, env.Origin
 	if observerID == "" {
-		observerID = observerKey
+		observerID = env.OriginID
+	}
+	if observerID == "" {
+		observerID = env.Origin
 	}
 
 	// Drop blocklisted traffic (quarantined RF bridges / rogue MQTT publishers)
@@ -170,6 +175,7 @@ func (in *Ingestor) handle(_ mqtt.Client, msg mqtt.Message) {
 		Packet:         packet,
 		RawHex:         env.Raw,
 		ObserverID:     observerID,
+		ObserverName:   observerName,
 		ObserverPubkey: env.OriginID,
 		Region:         region,
 		SNR:            env.SNR.ptr(),
@@ -238,9 +244,13 @@ func (in *Ingestor) handleStatus(msg mqtt.Message) {
 	if region == "" {
 		region = env.Region
 	}
-	observerID := env.Origin
+	// Keyed by public key like the packet path — the name is only a label.
+	observerID, observerName := observerKey, env.Origin
 	if observerID == "" {
-		observerID = observerKey
+		observerID = env.OriginID
+	}
+	if observerID == "" {
+		observerID = env.Origin
 	}
 	if observerID == "" {
 		return
@@ -278,7 +288,7 @@ func (in *Ingestor) handleStatus(msg mqtt.Message) {
 	// battery/noise reading with the reconnect time invents a data point that was
 	// never measured, one per reconnect, for as long as the retained message lives.
 	if msg.Retained() {
-		found, err := in.store.UpdateObserverStatusIfPresent(observerID, region, pubkey, string(b), env.Radio, now)
+		found, err := in.store.UpdateObserverStatusIfPresent(observerID, observerName, region, pubkey, string(b), env.Radio, now)
 		if err != nil {
 			in.log.Error("update observer status failed", "err", err)
 		} else if !found {
@@ -286,7 +296,7 @@ func (in *Ingestor) handleStatus(msg mqtt.Message) {
 		}
 		return
 	}
-	if err := in.store.UpsertObserverStatus(observerID, region, pubkey, string(b), env.Radio, now); err != nil {
+	if err := in.store.UpsertObserverStatus(observerID, observerName, region, pubkey, string(b), env.Radio, now); err != nil {
 		in.log.Error("store observer status failed", "err", err)
 	}
 	// Append a point to the telemetry time series (rate-floored in the store) so

@@ -611,7 +611,7 @@
 								<Tooltip text={fmtAbs(h.receivedAt)} class="w-10 shrink-0"><span class="font-mono text-fg-faint text-xs tnum">{ago(h.receivedAt)}</span></Tooltip>
 								<span class="label shrink-0 rounded px-1.5 py-0.5 text-[0.56rem] {h.kind === 'advert' ? 'text-signal bg-signal/10' : 'text-sky bg-sky/10'}">{h.kind === 'advert' ? 'SENT' : 'RELAY'}</span>
 								<PayloadTag type={h.payloadType} />
-								<span class="font-mono text-fg-dim min-w-0 flex-1 truncate text-xs">via {h.observerId ?? '—'}</span>
+								<span class="font-mono text-fg-dim min-w-0 flex-1 truncate text-xs">via {h.observerName ?? h.observerId ?? '—'}</span>
 								{#if h.kind === 'relay'}<Tooltip text="this node's position in the packet's path" class="shrink-0"><span class="font-mono text-fg-dim text-xs tnum">hop {h.hopIndex + 1}/{h.pathHops}</span></Tooltip>{/if}
 								<span class="font-mono w-14 shrink-0 text-right text-xs tnum" style="color:{snrColor(h.snr)}">{fmtSnr(h.snr)} dB</span>
 							</div>

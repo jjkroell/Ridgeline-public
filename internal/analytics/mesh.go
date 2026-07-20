@@ -63,7 +63,9 @@ type TopologyEdge struct {
 // distinct nodes' adverts reached it, and how many of those it heard directly
 // (zero-hop) — i.e. its true RF neighbours.
 type ObserverCoverage struct {
+	// ID is the observer's stable identity (its public key); Name is the label.
 	ID            string `json:"id"`
+	Name          string `json:"name,omitempty"`
 	Region        string `json:"region,omitempty"`
 	Observations  int    `json:"observations"`
 	DistinctNodes int    `json:"distinctNodes"`
@@ -77,11 +79,13 @@ type ObserverCoverage struct {
 // DirectLink is a true RF edge: an observer that heard a node's advert at zero
 // hops, so the two are within direct radio range. Count is how many times.
 type DirectLink struct {
-	Observer string `json:"observer"`
-	NodeKey  string `json:"nodeKey"`
-	NodeName string `json:"nodeName"`
-	Role     string `json:"role"`
-	Count    int    `json:"count"`
+	// Observer is the observer's stable identity; ObserverName is the label.
+	Observer     string `json:"observer"`
+	ObserverName string `json:"observerName,omitempty"`
+	NodeKey      string `json:"nodeKey"`
+	NodeName     string `json:"nodeName"`
+	Role         string `json:"role"`
+	Count        int    `json:"count"`
 }
 
 // MeshKPIs are the single-number headline tiles.
@@ -383,10 +387,12 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 	out.TopRelays = ranks
 
 	// Observer coverage.
+	obsNames, _ := st.ObserverNames()
 	cov := make([]ObserverCoverage, 0, len(obsCount))
 	for id, n := range obsCount {
 		cov = append(cov, ObserverCoverage{
 			ID:            id,
+			Name:          obsNames[id],
 			Region:        obsRegion[id],
 			Observations:  n,
 			DistinctNodes: len(advHeard[id]),
@@ -403,7 +409,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 		for nk, c := range nodes {
 			reachByNode[nk]++
 			n := byKey[nk]
-			links = append(links, DirectLink{Observer: obsID, NodeKey: nk, NodeName: displayName(n, nk), Role: n.Role, Count: c})
+			links = append(links, DirectLink{Observer: obsID, ObserverName: obsNames[obsID], NodeKey: nk, NodeName: displayName(n, nk), Role: n.Role, Count: c})
 		}
 	}
 	sort.Slice(links, func(i, j int) bool { return links[i].Count > links[j].Count })

@@ -138,7 +138,11 @@ func (s *Store) Stats() (Stats, error) {
 // Observer is a row from the observers table. Latitude/Longitude are resolved
 // by matching the observer's public key to an advertised node, when available.
 type Observer struct {
-	ID           string          `json:"id"`
+	// ID is the observer's stable identity — its public key (or, for rows that
+	// never carried one, its name). Use Name for anything shown to a person.
+	ID string `json:"id"`
+	// Name is the operator-chosen label. It changes freely and identifies nothing.
+	Name         string          `json:"name,omitempty"`
 	Region       string          `json:"region"`
 	PublicKey    string          `json:"publicKey,omitempty"`
 	Latitude     *float64        `json:"latitude,omitempty"`
@@ -189,7 +193,7 @@ func (s *Store) ListRetiredObservers() ([]Observer, error) {
 
 func (s *Store) listObservers(where string) ([]Observer, error) {
 	rows, err := s.db.Query(`
-		SELECT o.id, COALESCE(o.region,''), COALESCE(o.pubkey,''),
+		SELECT o.id, COALESCE(o.name,''), COALESCE(o.region,''), COALESCE(o.pubkey,''),
 		       n.latitude, n.longitude, o.first_seen, o.last_seen, o.packet_count,
 		       o.status_json, COALESCE(o.last_status_at,''), COALESCE(o.retired_at,'')
 		FROM observers o
@@ -205,7 +209,7 @@ func (s *Store) listObservers(where string) ([]Observer, error) {
 	for rows.Next() {
 		var o Observer
 		var statusJSON *string
-		if err := rows.Scan(&o.ID, &o.Region, &o.PublicKey,
+		if err := rows.Scan(&o.ID, &o.Name, &o.Region, &o.PublicKey,
 			&o.Latitude, &o.Longitude, &o.FirstSeen, &o.LastSeen, &o.PacketCount,
 			&statusJSON, &o.LastStatusAt, &o.RetiredAt); err != nil {
 			return nil, err
@@ -509,4 +513,24 @@ func (s *Store) SetHashSizes(sizes map[string]int) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// ObserverNames maps each observer's stable id (its public key) to the friendly
+// label to show for it. Observations store the id, so anything presenting an
+// observer to a person resolves the label through this.
+func (s *Store) ObserverNames() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT id, COALESCE(NULLIF(name,''), id) FROM observers`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
 }

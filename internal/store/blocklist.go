@@ -205,10 +205,10 @@ type PurgeResult struct {
 	// deleted observer.
 	Telemetry int64 `json:"telemetry"`
 	Nodes     int64 `json:"nodes"`
-	Claims       int64 `json:"claims"`
-	Notes        int64 `json:"notes"`
-	Locations    int64 `json:"locations"`
-	Shares       int64 `json:"shares"`
+	Claims    int64 `json:"claims"`
+	Notes     int64 `json:"notes"`
+	Locations int64 `json:"locations"`
+	Shares    int64 `json:"shares"`
 	// SkippedClaimed lists keys the caller held back from the delete because a
 	// user has claimed them (set by the purge handler, not by the store).
 	SkippedClaimed []string `json:"skippedClaimed,omitempty"`

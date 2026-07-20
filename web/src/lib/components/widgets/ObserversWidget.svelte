@@ -39,7 +39,7 @@
 				<a href="{base}/observers/{encodeURIComponent(o.id)}" class="panel-hover flex items-center gap-3 px-5 py-2.5">
 					<span class="h-2 w-2 shrink-0 rounded-full" style="background:{online(o) ? 'var(--color-signal)' : 'var(--color-fg-faint)'}"></span>
 					<div class="min-w-0 flex-1">
-						<div class="text-fg truncate text-sm font-medium">{o.id}</div>
+						<div class="text-fg truncate text-sm font-medium">{o.name ?? o.id}</div>
 						<div class="font-mono text-fg-faint mt-0.5 text-[0.68rem]">heard {ago(o.lastSeen)} ago</div>
 					</div>
 					{#if o.status?.batteryMv}

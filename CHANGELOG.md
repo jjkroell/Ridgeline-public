@@ -4,6 +4,41 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.5.3] — 2026-07-19
+
+Observers are now identified by their public key, not their name.
+
+### Changed
+- **An observer's identity is its public key; the name is a label.** The name is
+  something the operator changes at will, so using it as the identity meant a
+  rename started a whole new observer: every packet and telemetry sample stayed
+  under the old name and the renamed one began from nothing. The name is not
+  reliably distinct either — a device publishing `"Foo "` and `"Foo"` was two
+  observers. The MQTT topic carries the public key on every message, so it is
+  always available and survives any number of renames.
+- **Existing data is re-keyed once, on upgrade.** History recorded under each old
+  name is repointed at that observer's key, rows that were separate identities
+  only because of a rename are merged, and blocklist entries follow so a
+  quarantined observer does not silently come off the list. Merging takes the
+  observer's current identity — label, status, region, radio, and whether it is
+  retired — from its most recent row, so a receiver retired under an old name and
+  since returned to the air is not left hidden. Observers whose key is unknown
+  stay keyed by name; there is nothing better, and dropping them would lose
+  their history.
+- **Names are resolved server-side** for the live feed, node history, per-node
+  observer lists and mesh analytics, so a name renders even for an observer that
+  has since been retired.
+
+### Upgrade note
+The re-key rewrites the observer id on every stored observation. It runs
+automatically on first start and is idempotent, but **back up your database
+first** — there is no down-migration.
+
+### Known issue
+- Telemetry stranded by a rename whose old observer row was already deleted
+  cannot be re-attached: nothing records which key that name belonged to. Renames
+  from here on strand nothing.
+
 ## [v0.5.2] — 2026-07-19
 
 ### Fixed

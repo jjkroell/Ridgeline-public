@@ -283,6 +283,9 @@ func Open(path string) (*Store, error) {
 	// prev_owner_name records a node's last verified owner after they delete their
 	// account, so the public page can show "previously owned by …".
 	db.Exec(`ALTER TABLE nodes ADD COLUMN prev_owner_name TEXT`)
+	// The observer's friendly name is a label, not its identity — see
+	// migrateObserversToPubkey, run at the end of migrate().
+	db.Exec(`ALTER TABLE observers ADD COLUMN name TEXT`)
 	// Retiring an observer hides it from the observers page without touching the
 	// packets it reported — a decommissioned receiver stops being presented as
 	// part of the network while its history stays attributable to it. NULL means
@@ -314,6 +317,12 @@ func Open(path string) (*Store, error) {
 		WHERE id = (SELECT MIN(id) FROM users)
 		  AND (SELECT COUNT(*) FROM users) > 0
 		  AND NOT EXISTS (SELECT 1 FROM users WHERE protected = 1)`)
+	// Re-key observers by public key. Runs last: it reads and rewrites the columns
+	// every migration above has finished adding.
+	if err := migrateObserversToPubkey(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	s := &Store{db: db, needAdvertTxBackfill: needAdvertTxBackfill}
 	if err := s.loadBlocklist(); err != nil {
 		db.Close()
@@ -330,17 +339,18 @@ func Open(path string) (*Store, error) {
 // config + device telemetry) from its /status message, creating the observer row
 // if a status arrives before any packet. statusJSON is the marshalled
 // ObserverStatus; receivedAt is the server's receipt time (RFC3339).
-func (s *Store) UpsertObserverStatus(id, region, pubkey, statusJSON, radio, receivedAt string) error {
+func (s *Store) UpsertObserverStatus(id, name, region, pubkey, statusJSON, radio, receivedAt string) error {
 	_, err := s.db.Exec(`
-		INSERT INTO observers (id, region, pubkey, first_seen, last_seen, packet_count, status_json, last_status_at, radio)
-		VALUES (?,?,?,?,?,0,?,?,?)
+		INSERT INTO observers (id, name, region, pubkey, first_seen, last_seen, packet_count, status_json, last_status_at, radio)
+		VALUES (?,?,?,?,?,?,0,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 			status_json    = excluded.status_json,
 			last_status_at = excluded.last_status_at,
+			name           = COALESCE(NULLIF(excluded.name,''), observers.name),
 			radio          = COALESCE(NULLIF(excluded.radio,''), observers.radio),
 			region         = COALESCE(NULLIF(excluded.region,''), observers.region),
 			pubkey         = COALESCE(NULLIF(excluded.pubkey,''), observers.pubkey)`,
-		id, region, pubkey, receivedAt, receivedAt, statusJSON, receivedAt, radio)
+		id, name, region, pubkey, receivedAt, receivedAt, statusJSON, receivedAt, radio)
 	return err
 }
 
@@ -377,16 +387,17 @@ func (s *Store) UnretireObserver(id string) error {
 // time and resurrecting it on the observers page. A retained status is a stale
 // last-known value, never evidence the device is live, so it may refresh an
 // observer that already exists but must not conjure one.
-func (s *Store) UpdateObserverStatusIfPresent(id, region, pubkey, statusJSON, radio, receivedAt string) (bool, error) {
+func (s *Store) UpdateObserverStatusIfPresent(id, name, region, pubkey, statusJSON, radio, receivedAt string) (bool, error) {
 	res, err := s.db.Exec(`
 		UPDATE observers SET
 			status_json    = ?,
 			last_status_at = ?,
+			name           = COALESCE(NULLIF(?,''), name),
 			radio          = COALESCE(NULLIF(?,''), radio),
 			region         = COALESCE(NULLIF(?,''), region),
 			pubkey         = COALESCE(NULLIF(?,''), pubkey)
 		WHERE id = ?`,
-		statusJSON, receivedAt, radio, region, pubkey, id)
+		statusJSON, receivedAt, name, radio, region, pubkey, id)
 	if err != nil {
 		return false, err
 	}
@@ -440,9 +451,15 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // Observation is one observer's sighting of one packet, ready to persist.
 type Observation struct {
-	Packet         *meshcore.Packet
-	RawHex         string // full raw packet hex as received
-	ObserverID     string
+	Packet *meshcore.Packet
+	RawHex string // full raw packet hex as received
+	// ObserverID is the observer's stable identity — its public key, which the
+	// MQTT topic carries on every message. It falls back to the friendly name
+	// only when no key is available, since a name changes and is not distinct.
+	ObserverID string
+	// ObserverName is the friendly label shown in the UI. It follows the device
+	// through renames and never identifies it.
+	ObserverName   string
 	ObserverPubkey string // observer node public key (origin_id), for geo-locating
 	Region         string
 	SNR            *float64
@@ -482,15 +499,20 @@ func (s *Store) Record(o Observation) error {
 	}
 
 	if o.ObserverID != "" {
+		// The name is a label that follows the device: an operator renaming their
+		// receiver must not fork it into a second observer, so the friendly name is
+		// overwritten on every packet rather than preserved.
 		if _, err := tx.Exec(`
-			INSERT INTO observers (id, region, pubkey, first_seen, last_seen, packet_count)
-			VALUES (?,?,?,?,?,1)
+			INSERT INTO observers (id, name, region, pubkey, first_seen, last_seen, packet_count)
+			VALUES (?,?,?,?,?,?,1)
 			ON CONFLICT(id) DO UPDATE SET
 				last_seen    = excluded.last_seen,
+				name         = COALESCE(NULLIF(excluded.name,''), observers.name),
 				region       = COALESCE(NULLIF(excluded.region,''), observers.region),
 				pubkey       = COALESCE(NULLIF(excluded.pubkey,''), observers.pubkey),
 				packet_count = observers.packet_count + 1`,
-			o.ObserverID, nullStr(o.Region), nullStr(o.ObserverPubkey), ts, ts,
+			o.ObserverID, nullStr(o.ObserverName), nullStr(o.Region),
+			nullStr(o.ObserverPubkey), ts, ts,
 		); err != nil {
 			return fmt.Errorf("store: upsert observer: %w", err)
 		}

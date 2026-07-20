@@ -314,7 +314,7 @@
 										class="panel-hover group grid w-full grid-cols-[52px_1fr_44px_52px_44px_16px] items-center gap-2 px-3 py-2 text-left text-xs"
 									>
 										<span class="font-mono text-fg-faint tnum">{rel(e.receivedAt)}</span>
-										<span class="font-mono text-fg-dim truncate">{e.observerId ?? '—'}</span>
+										<span class="font-mono text-fg-dim truncate">{e.observerName ?? e.observerId ?? '—'}</span>
 										<span class="font-mono text-fg-dim text-right tnum">{e.path?.length ?? 0}</span>
 										<span class="font-mono text-right tnum" style="color:{snrColor(e.snr)}">{fmtSnr(e.snr)}</span>
 										<span class="font-mono text-fg-dim text-right tnum">{e.rssi ?? '—'}</span>
@@ -344,7 +344,7 @@
 						</div>
 						{#if summary}<div class="text-fg-dim mb-1 truncate text-sm">{summary}</div>{/if}
 						{#if srcDst}<div class="font-mono text-fg-faint mb-1 text-xs">{srcDst.src} <span class="text-fg-faint">→</span> {srcDst.dst}</div>{/if}
-						<h2 class="font-display text-fg truncate text-lg font-700">{ev.observerId ?? '—'}</h2>
+						<h2 class="font-display text-fg truncate text-lg font-700">{ev.observerName ?? ev.observerId ?? '—'}</h2>
 						<div class="font-mono text-fg-dim text-xs">heard {ago(ev.receivedAt)} ago{#if events.length > 1} · {relWords(ev.receivedAt)}{/if}</div>
 					</div>
 					{@render headerActions()}
@@ -383,7 +383,7 @@
 					<section>
 						<div class="label mb-2">Packet</div>
 						<div class="divide-line/40 border-line/50 divide-y rounded-[var(--radius)] border text-sm">
-							{#each [{ k: 'Message Hash', v: ev.messageHash, mono: true }, { k: 'Route Type', v: ev.routeType }, { k: 'Payload Type', v: ev.payloadType }, { k: 'Payload Version', v: String(ev.payloadVersion ?? 0) }, { k: 'Hop Count', v: String(ev.pathHops ?? 0) }, ...(ev.hashSize ? [{ k: 'Hash Size', v: `${ev.hashSize}-byte` }] : []), ...(ev.transportCodes ? [{ k: 'Transport Codes', v: ev.transportCodes.map((c) => '0x' + c.toString(16).toUpperCase()).join(', '), mono: true }] : []), { k: 'Observer', v: ev.observerId ?? '—' }, ...(ev.region ? [{ k: 'Scope', v: ev.region }] : []), ...(propagation ? [{ k: 'Propagation', v: propagation }] : [])] as f (f.k)}
+							{#each [{ k: 'Message Hash', v: ev.messageHash, mono: true }, { k: 'Route Type', v: ev.routeType }, { k: 'Payload Type', v: ev.payloadType }, { k: 'Payload Version', v: String(ev.payloadVersion ?? 0) }, { k: 'Hop Count', v: String(ev.pathHops ?? 0) }, ...(ev.hashSize ? [{ k: 'Hash Size', v: `${ev.hashSize}-byte` }] : []), ...(ev.transportCodes ? [{ k: 'Transport Codes', v: ev.transportCodes.map((c) => '0x' + c.toString(16).toUpperCase()).join(', '), mono: true }] : []), { k: 'Observer', v: ev.observerName ?? ev.observerId ?? '—' }, ...(ev.region ? [{ k: 'Scope', v: ev.region }] : []), ...(propagation ? [{ k: 'Propagation', v: propagation }] : [])] as f (f.k)}
 							<div class="flex items-center justify-between gap-3 px-3 py-2">
 								<span class="label normal-case">{f.k}</span>
 								<span class="text-fg text-right {f.mono ? 'font-mono text-xs' : 'text-sm'} tnum">{f.v}</span>

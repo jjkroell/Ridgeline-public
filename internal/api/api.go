@@ -223,15 +223,19 @@ type LiveEvent struct {
 	Raw            string     `json:"raw,omitempty"`
 	// GroupText channel fields. ChannelHash is always set for GroupText; the
 	// rest are populated only when the message decrypts (e.g. public channel).
-	ChannelHash string   `json:"channelHash,omitempty"`
-	Channel     string   `json:"channel,omitempty"`
-	Sender      string   `json:"sender,omitempty"`
-	Text        string   `json:"text,omitempty"`
-	ObserverID  string   `json:"observerId,omitempty"`
-	Region      string   `json:"region,omitempty"`
-	SNR         *float64 `json:"snr,omitempty"`
-	RSSI        *float64 `json:"rssi,omitempty"`
-	ReceivedAt  string   `json:"receivedAt"`
+	ChannelHash string `json:"channelHash,omitempty"`
+	Channel     string `json:"channel,omitempty"`
+	Sender      string `json:"sender,omitempty"`
+	Text        string `json:"text,omitempty"`
+	// ObserverID is the observer's stable identity (its public key);
+	// ObserverName is the label to show. Resolved server-side so the client
+	// renders a name even for an observer that has since been retired.
+	ObserverID   string   `json:"observerId,omitempty"`
+	ObserverName string   `json:"observerName,omitempty"`
+	Region       string   `json:"region,omitempty"`
+	SNR          *float64 `json:"snr,omitempty"`
+	RSSI         *float64 `json:"rssi,omitempty"`
+	ReceivedAt   string   `json:"receivedAt"`
 	// Node is populated for Advert packets.
 	Node *LiveNode `json:"node,omitempty"`
 }
@@ -249,7 +253,7 @@ type LiveNode struct {
 // newLiveEvent builds the JSON event shape from a decoded packet and its
 // reception envelope. Shared by the live broadcast and the /api/recent replay
 // so both render identically.
-func newLiveEvent(pkt *meshcore.Packet, rawHex, observerID, region, receivedAt string, snr, rssi *float64) LiveEvent {
+func newLiveEvent(pkt *meshcore.Packet, rawHex, observerID, observerName, region, receivedAt string, snr, rssi *float64) LiveEvent {
 	ev := LiveEvent{
 		MessageHash:    pkt.MessageHash,
 		RouteType:      pkt.RouteType.String(),
@@ -262,6 +266,7 @@ func newLiveEvent(pkt *meshcore.Packet, rawHex, observerID, region, receivedAt s
 		PayloadRaw:     pkt.PayloadRaw,
 		Raw:            strings.ToUpper(rawHex),
 		ObserverID:     observerID,
+		ObserverName:   observerName,
 		Region:         region,
 		SNR:            snr,
 		RSSI:           rssi,
@@ -293,7 +298,7 @@ func newLiveEvent(pkt *meshcore.Packet, rawHex, observerID, region, receivedAt s
 
 // Broadcast pushes an observation to live WebSocket subscribers.
 func (s *Server) Broadcast(o store.Observation) {
-	ev := newLiveEvent(o.Packet, o.RawHex, o.ObserverID, o.Region,
+	ev := newLiveEvent(o.Packet, o.RawHex, o.ObserverID, o.ObserverName, o.Region,
 		o.ReceivedAt.UTC().Format(time.RFC3339Nano), o.SNR, o.RSSI)
 	b, err := json.Marshal(ev)
 	if err != nil {
@@ -582,6 +587,8 @@ func (s *Server) packet(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	// Observations store the observer's stable id; resolve labels once per request.
+	obsNames, _ := s.store.ObserverNames()
 	out := make([]LiveEvent, 0, len(raws))
 	for _, ro := range raws {
 		pkt, err := meshcore.DecodeHex(ro.RawHex)
@@ -591,7 +598,7 @@ func (s *Server) packet(w http.ResponseWriter, r *http.Request) {
 		if s.store.ShouldDrop(pkt, ro.ObserverID) {
 			continue // keep quarantined traffic hidden here too
 		}
-		out = append(out, newLiveEvent(pkt, ro.RawHex, ro.ObserverID, ro.Region, ro.ReceivedAt, ro.SNR, ro.RSSI))
+		out = append(out, newLiveEvent(pkt, ro.RawHex, ro.ObserverID, obsNames[ro.ObserverID], ro.Region, ro.ReceivedAt, ro.SNR, ro.RSSI))
 	}
 	writeJSON(w, out)
 }
@@ -608,6 +615,8 @@ func (s *Server) recent(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	// Observations store the observer's stable id; resolve labels once per request.
+	obsNames, _ := s.store.ObserverNames()
 
 	out := make([]LiveEvent, 0, len(raws))
 	for _, ro := range raws {
@@ -620,7 +629,7 @@ func (s *Server) recent(w http.ResponseWriter, r *http.Request) {
 		if s.store.ShouldDrop(pkt, ro.ObserverID) {
 			continue
 		}
-		out = append(out, newLiveEvent(pkt, ro.RawHex, ro.ObserverID, ro.Region, ro.ReceivedAt, ro.SNR, ro.RSSI))
+		out = append(out, newLiveEvent(pkt, ro.RawHex, ro.ObserverID, obsNames[ro.ObserverID], ro.Region, ro.ReceivedAt, ro.SNR, ro.RSSI))
 	}
 	writeJSON(w, out)
 }
@@ -639,6 +648,8 @@ func (s *Server) channelsRecent(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	// Observations store the observer's stable id; resolve labels once per request.
+	obsNames, _ := s.store.ObserverNames()
 
 	out := make([]LiveEvent, 0, len(raws))
 	for _, ro := range raws {
@@ -649,7 +660,7 @@ func (s *Server) channelsRecent(w http.ResponseWriter, r *http.Request) {
 		if s.store.ShouldDrop(pkt, ro.ObserverID) {
 			continue
 		}
-		out = append(out, newLiveEvent(pkt, ro.RawHex, ro.ObserverID, ro.Region, ro.ReceivedAt, ro.SNR, ro.RSSI))
+		out = append(out, newLiveEvent(pkt, ro.RawHex, ro.ObserverID, obsNames[ro.ObserverID], ro.Region, ro.ReceivedAt, ro.SNR, ro.RSSI))
 	}
 	writeJSON(w, out)
 }

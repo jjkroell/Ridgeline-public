@@ -101,7 +101,7 @@ func TestUpdateObserverStatusIfPresentNeverCreates(t *testing.T) {
 	st := testStore(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	found, err := st.UpdateObserverStatusIfPresent("ghost-obs", "R1", "AA", `{"state":"online"}`, "900.0,250,11,5", now)
+	found, err := st.UpdateObserverStatusIfPresent("ghost-obs", "Ghost Label", "R1", "AA", `{"state":"online"}`, "900.0,250,11,5", now)
 	if err != nil {
 		t.Fatalf("UpdateObserverStatusIfPresent: %v", err)
 	}
@@ -117,10 +117,10 @@ func TestUpdateObserverStatusIfPresentNeverCreates(t *testing.T) {
 	}
 
 	// An observer we already know is still refreshed by it.
-	if err := st.UpsertObserverStatus("real-obs", "R1", "BB", `{"state":"online"}`, "900.0,250,11,5", now); err != nil {
+	if err := st.UpsertObserverStatus("real-obs", "Real Label", "R1", "BB", `{"state":"online"}`, "900.0,250,11,5", now); err != nil {
 		t.Fatalf("UpsertObserverStatus: %v", err)
 	}
-	found, err = st.UpdateObserverStatusIfPresent("real-obs", "R1", "BB", `{"state":"offline"}`, "", now)
+	found, err = st.UpdateObserverStatusIfPresent("real-obs", "Real Label", "R1", "BB", `{"state":"offline"}`, "", now)
 	if err != nil || !found {
 		t.Fatalf("UpdateObserverStatusIfPresent(real-obs) = (%v, %v), want (true, nil)", found, err)
 	}
