@@ -447,9 +447,9 @@ export const admin = {
 	/** Permanently delete nodes (adverts + rows) with no blocklist entry. */
 	deleteNodes: (csrf: string, nodes: string[]) =>
 		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { nodes }),
-	/** Permanently delete observers AND every packet they reported, with no block.
-	 *  Destructive — prefer `retireObserver` for a receiver that has simply left
-	 *  the network, which keeps its history. */
+	/** Permanently delete observers, every packet they reported, and their device
+	 *  telemetry, with no block. Destructive — prefer `retireObserver` for a
+	 *  receiver that has simply left the network, which keeps its history. */
 	deleteObservers: (csrf: string, observers: string[]) =>
 		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { observers }),
 	/** Observers withdrawn from the observers page but whose packets are kept. */

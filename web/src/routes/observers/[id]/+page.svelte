@@ -83,7 +83,8 @@
 		if (
 			!(await confirmer.ask({
 				title: `Delete observer "${id}"?`,
-				message: 'This permanently removes the observer and all of its stored packets. This cannot be undone.',
+				message:
+					'This permanently removes the observer, every packet it reported, and its battery/noise history. This cannot be undone. To take it off this page but keep its history, use Retire instead.',
 				confirmLabel: 'Delete observer',
 				danger: true
 			}))

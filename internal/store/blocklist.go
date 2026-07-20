@@ -201,7 +201,10 @@ func (s *Store) ListBlocks() ([]BlockEntry, error) {
 // PurgeResult reports what a purge removed.
 type PurgeResult struct {
 	Observations int64 `json:"observations"`
-	Nodes        int64 `json:"nodes"`
+	// Telemetry counts observer device-telemetry rows removed alongside a
+	// deleted observer.
+	Telemetry int64 `json:"telemetry"`
+	Nodes     int64 `json:"nodes"`
 	Claims       int64 `json:"claims"`
 	Notes        int64 `json:"notes"`
 	Locations    int64 `json:"locations"`
@@ -338,8 +341,17 @@ func (s *Store) purgeTargets(observers, bridges, nodes []string, cascadeUserData
 			*c.count += n
 		}
 	}
-	// Delete observer rows for purged observers.
+	// Delete observer rows for purged observers, along with their device
+	// telemetry. The telemetry series is keyed by observer id and nothing else
+	// references it, so leaving it behind orphans rows that no page can reach and
+	// no sweep collects — invisible growth for every observer ever deleted.
 	for o := range obsSet {
+		r, err := tx.Exec(`DELETE FROM observer_telemetry WHERE observer_id = ?`, o)
+		if err != nil {
+			return res, err
+		}
+		n, _ := r.RowsAffected()
+		res.Telemetry += n
 		if _, err := tx.Exec(`DELETE FROM observers WHERE id = ?`, o); err != nil {
 			return res, err
 		}

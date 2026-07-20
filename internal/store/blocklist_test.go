@@ -257,7 +257,7 @@ func TestKnownBridgeIsNotBlocked(t *testing.T) {
 	st := testStore(t)
 	bridge := "0485454C383E00112233445566778899AABBCCDDEEFF00112233445566778899"
 
-	if err := st.AddBlock(BlockKnown, bridge, "Bridge (far half)", "operator's own bridge"); err != nil {
+	if err := st.AddBlock(BlockKnown, bridge, "Test Bridge Far", "operator's own bridge"); err != nil {
 		t.Fatalf("mark known: %v", err)
 	}
 	if st.ShouldDrop(advertPkt(bridge), "obs-a") {
@@ -278,5 +278,47 @@ func TestKnownBridgeIsNotBlocked(t *testing.T) {
 	}
 	if k := st.KnownBridges(); k[bridge] {
 		t.Error("KnownBridges still reports the bridge after unmarking")
+	}
+}
+
+// TestPurgeObserverRemovesTelemetry verifies that deleting an observer takes its
+// device-telemetry series with it. The series is keyed by observer id and
+// nothing else references it, so leaving it behind orphans rows that no page can
+// reach and no sweep collects.
+func TestPurgeObserverRemovesTelemetry(t *testing.T) {
+	st := testStore(t)
+
+	now := time.Now().UTC()
+	for _, id := range []string{"obs-doomed", "obs-kept"} {
+		if err := st.Record(Observation{
+			Packet:     advertPkt("AABBCCDD"),
+			RawHex:     "00",
+			ObserverID: id,
+			ReceivedAt: now,
+		}); err != nil {
+			t.Fatalf("record %s: %v", id, err)
+		}
+		mv := 4100
+		if err := st.RecordObserverTelemetry(id, now.Format(time.RFC3339), ObserverStatus{BatteryMV: &mv}); err != nil {
+			t.Fatalf("telemetry %s: %v", id, err)
+		}
+	}
+
+	res, err := st.PurgeTargets([]string{"obs-doomed"}, nil, nil)
+	if err != nil {
+		t.Fatalf("PurgeTargets: %v", err)
+	}
+	if res.Telemetry != 1 {
+		t.Fatalf("res.Telemetry = %d, want 1", res.Telemetry)
+	}
+
+	var doomed, kept int
+	st.db.QueryRow(`SELECT COUNT(*) FROM observer_telemetry WHERE observer_id = 'obs-doomed'`).Scan(&doomed)
+	st.db.QueryRow(`SELECT COUNT(*) FROM observer_telemetry WHERE observer_id = 'obs-kept'`).Scan(&kept)
+	if doomed != 0 {
+		t.Fatalf("purged observer left %d telemetry rows, want 0", doomed)
+	}
+	if kept != 1 {
+		t.Fatalf("untouched observer has %d telemetry rows, want 1", kept)
 	}
 }

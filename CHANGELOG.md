@@ -4,6 +4,23 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.5.2] — 2026-07-19
+
+### Fixed
+- **Deleting an observer now removes its device telemetry too.** The
+  battery/noise series is keyed by observer id and nothing else references it,
+  so deleting the observer stranded every sample it had ever recorded — rows no
+  page could reach and no sweep collected, for every observer ever deleted. The
+  delete dialog said "all of its stored packets"; it now says what it does, and
+  reports the telemetry rows removed.
+
+### Known issue
+- Observer identity is the friendly name, so **renaming an observer strands its
+  telemetry** under the old name and starts a fresh series. This is separate
+  from the fix above and is not addressed here — a rename is not a deletion, and
+  the stranded samples are real measurements worth keeping until observers are
+  keyed by something stable.
+
 ## [v0.5.1] — 2026-07-19
 
 Decommissioned observers no longer come back from the dead.
