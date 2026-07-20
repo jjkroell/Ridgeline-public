@@ -575,7 +575,7 @@
 					<div class="divide-line/40 divide-y">
 						{#each observers as o (o.id)}
 							<div class="flex items-center gap-3 px-5 py-2 text-sm">
-								<span class="text-fg min-w-0 flex-1 truncate font-mono text-xs">{o.id}</span>
+								<span class="text-fg min-w-0 flex-1 truncate text-xs">{o.name ?? o.id}</span>
 								{#if o.region}<span class="label !text-[0.58rem]">{o.region}</span>{/if}
 								<span class="font-mono text-fg-faint w-14 text-right text-xs tnum">{o.count} advert{o.count === 1 ? '' : 's'}</span>
 								<span class="font-mono w-14 text-right text-xs tnum" style="color:{snrColor(o.avgSnr)}">{o.avgSnr != null ? o.avgSnr.toFixed(1) + ' dB' : '—'}</span>

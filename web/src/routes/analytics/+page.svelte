@@ -109,6 +109,8 @@
 		if (!links.length) return null;
 		// Observers actually present as direct-link endpoints.
 		const obsIds = [...new Set(links.map((l) => l.observer))];
+		// Observers are keyed by public key; show the friendly label.
+		const obsLabel = new Map(links.map((l) => [l.observer, l.observerName ?? l.observer]));
 		const obsPos = new Map<string, { x: number; y: number; a: number }>();
 		obsIds.forEach((id, i) => {
 			const a = (i / obsIds.length) * Math.PI * 2 - Math.PI / 2;
@@ -147,7 +149,7 @@
 				return o && n ? { x1: o.x, y1: o.y, x2: n.x, y2: n.y } : null;
 			})
 			.filter((e): e is { x1: number; y1: number; x2: number; y2: number } => !!e);
-		const observers = obsIds.map((id) => ({ id, ...obsPos.get(id)! }));
+		const observers = obsIds.map((id) => ({ id, label: obsLabel.get(id) ?? id, ...obsPos.get(id)! }));
 		return { observers, nodes, edges };
 	});
 
@@ -457,9 +459,9 @@
 									text-anchor="middle"
 									class="font-mono"
 									fill="var(--color-fg-dim)"
-									font-size="11">{o.id.length > 18 ? o.id.slice(0, 17) + '…' : o.id}</text
+									font-size="11">{o.label.length > 18 ? o.label.slice(0, 17) + '…' : o.label}</text
 								>
-								<title>{o.id}</title>
+								<title>{o.label}</title>
 							</g>
 						{/each}
 					</svg>
@@ -512,7 +514,7 @@
 					<div class="px-5 py-2.5">
 						<div class="flex items-center gap-3">
 							<div class="min-w-0 flex-1">
-								<div class="text-fg truncate text-sm font-medium">{o.id}</div>
+								<div class="text-fg truncate text-sm font-medium">{o.name ?? o.id}</div>
 								{#if o.region}<div class="font-mono text-fg-faint mt-0.5 text-[0.62rem]">{o.region}</div>{/if}
 							</div>
 							<Tooltip text="distinct nodes whose adverts reached it">

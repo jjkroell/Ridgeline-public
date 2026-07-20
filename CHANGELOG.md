@@ -4,6 +4,19 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.5.4] — 2026-07-20
+
+### Fixed
+- **Observers are shown by name again.** Keying observers by public key in
+  v0.5.3 made the key their id, and the UI renders ids — so the observers list,
+  both detail pages, the heard-by lists on node detail, the retired panel, and
+  the analytics coverage list and direct-link graph all displayed 64 hex
+  characters where a name belongs. The key is the right identity and the wrong
+  label. Every observer surface now shows the name, falling back to the id only
+  for an observer that never carried a key (where the id *is* its name). The
+  detail pages keep the key visible but quiet beneath the heading — it is what
+  the observer's MQTT topic is keyed by.
+
 ## [v0.5.3] — 2026-07-19
 
 Observers are now identified by their public key, not their name.

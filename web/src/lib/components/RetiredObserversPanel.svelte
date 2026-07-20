@@ -85,7 +85,7 @@
 			{#each retired as o (o.id)}
 				<div class="flex items-center gap-3 {row}">
 					<div class="min-w-0 flex-1">
-						<div class="text-fg truncate text-sm font-600">{o.id}</div>
+						<div class="text-fg truncate text-sm font-600">{o.name ?? o.id}</div>
 						<div class="label normal-case text-fg-faint mt-0.5 truncate">
 							{o.packetCount.toLocaleString()} packets · last heard {ago(o.lastSeen)}{o.retiredAt
 								? ` · retired ${ago(o.retiredAt)}`

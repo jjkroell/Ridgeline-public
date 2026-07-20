@@ -229,6 +229,11 @@
 			Observer not found. It may not have reported recently.
 		</div>
 	{:else}
+		<!-- The heading shows the operator's label; the public key is the actual
+		     identity and is still worth having to hand (it's what the observer's
+		     MQTT topic is keyed by), so keep it visible but quiet. -->
+		<div class="text-fg-faint mb-4 font-mono text-[0.68rem] break-all">{observer.publicKey || observer.id}</div>
+
 		<!-- KPI strip -->
 		<KpiStrip items={kpis} />
 

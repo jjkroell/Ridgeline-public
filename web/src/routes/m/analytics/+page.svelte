@@ -106,7 +106,7 @@
 		<div class="border-line/60 bg-panel divide-line/50 divide-y overflow-hidden rounded-2xl border">
 			{#each data.observers as o (o.id)}
 				<a href="/m/observers/{encodeURIComponent(o.id)}" class="active:bg-line/40 flex items-center gap-3 px-4 py-2.5">
-					<span class="text-fg min-w-0 flex-1 truncate text-sm">{o.id}</span>
+					<span class="text-fg min-w-0 flex-1 truncate text-sm">{o.name ?? o.id}</span>
 					<span class="text-fg-faint font-mono text-[0.62rem] tnum">{fmtNum(o.distinctNodes)} nodes · {fmtNum(o.directNodes)} direct</span>
 				</a>
 			{/each}

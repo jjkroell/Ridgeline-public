@@ -90,9 +90,11 @@
 		<!-- heading -->
 		<div class="mb-3 flex items-center gap-2.5">
 			<span class="h-2.5 w-2.5 rounded-full" style="background:{isFresh(observer.lastSeen) ? 'var(--color-signal)' : 'var(--color-fg-faint)'}"></span>
-			<h1 class="text-fg min-w-0 flex-1 truncate text-lg font-700">{observer.id}</h1>
+			<h1 class="text-fg min-w-0 flex-1 truncate text-lg font-700">{observer.name ?? observer.id}</h1>
 			{#if observer.region}<span class="label">{observer.region}</span>{/if}
 		</div>
+		<!-- Label above, actual identity here (the observer's MQTT topic key). -->
+		<div class="text-fg-faint mb-3 font-mono text-[0.62rem] break-all">{observer.publicKey || observer.id}</div>
 
 		<!-- window -->
 		<div class="mb-3 flex gap-2">

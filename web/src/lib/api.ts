@@ -60,6 +60,9 @@ export interface Observer {
 	id: string;
 	/** Operator-chosen label. Falls back to `id` when absent. */
 	name?: string;
+	/** The observer's node public key. Same as `id` for every observer that has
+	 *  one — `id` falls back to the name only when no key was ever seen. */
+	publicKey?: string;
 	region: string;
 	firstSeen: string;
 	lastSeen: string;
