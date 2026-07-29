@@ -4,6 +4,44 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.6.0] — 2026-07-28
+
+### Added
+- **Five colour themes, replacing the light/dark toggle.** Signal (the default
+  dark), Slate (deep blueprint navy, cyan accent), Graphite (warm near-black
+  brown, brass accent), Paper (warm topographic light) and Mist (cool blue-grey
+  light, indigo accent). A picker in the sidebar — and in the mobile More sheet —
+  previews each theme with its own ground and accent colour. Every palette
+  clears WCAG AA for body and dimmed text, and 3:1 for the faint tier and
+  accents, in both light and dark.
+- **Ago/Clock timestamp toggle on the live feed.** The feed showed only elapsed
+  time ("2m"); the wall-clock time a packet was heard was reachable only by
+  opening a row. A segmented control in the toolbar now switches every row
+  between the two, on desktop and mobile, and the choice is remembered.
+
+### Fixed
+- **Relative timestamps no longer go stale.** The elapsed label was computed
+  during render, so it only refreshed when something else re-rendered the feed —
+  which arriving packets happened to do. Pausing the feed, or a quiet mesh, left
+  every "2m" frozen at whatever it said when it was last drawn. The labels now
+  tick on their own.
+- **Tooltips are anchored by their measured width, not their maximum.** The
+  bubble was clamped against half of its 250px max width regardless of how wide
+  it actually rendered, so any tooltip whose trigger sat near a viewport edge was
+  pushed inward to a fixed position. In the sidebar that collapsed a whole row of
+  controls onto one shared spot. The clamp now uses the real width and only moves
+  a tooltip that would genuinely overflow.
+- **The feed's Time column widens for clock timestamps.** It was sized for "2m",
+  so a wall-clock time overflowed into the Type column.
+
+### Notes for self-hosters
+- Themes are selected by a `data-theme` attribute on `<html>`; the `theme-light`
+  class now only marks a theme as having a light base (which is what the map
+  layers read to pick a basemap). Adding your own theme is one entry in
+  `web/src/lib/theme.svelte.ts` plus one token block in `web/src/app.css`.
+- Existing visitors keep their saved preference: the previous `dark` and `light`
+  values are still valid theme ids.
+
 ## [v0.5.5] — 2026-07-20
 
 ### Fixed

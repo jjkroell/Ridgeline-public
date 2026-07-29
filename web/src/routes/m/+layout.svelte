@@ -7,6 +7,7 @@
 	import PwaInstall from '$lib/components/PwaInstall.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import DevBanner from '$lib/components/DevBanner.svelte';
+	import ThemePicker from '$lib/components/ThemePicker.svelte';
 
 	let { children } = $props();
 
@@ -116,12 +117,19 @@
 					<span class="label !text-coral !text-[0.6rem]">Off</span>
 				{/if}
 			</div>
-			<button onclick={() => theme.toggle()} aria-label="Toggle theme" class="text-fg-faint active:text-fg p-1">
-				{#if theme.mode === 'dark'}
-					<svg viewBox="0 0 24 24" class="text-amber h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
-				{:else}
-					<svg viewBox="0 0 24 24" class="text-signal h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
-				{/if}
+			<!-- Quick cycle; the full picker lives in the More sheet. The swatch
+			     previews the ACTIVE theme so the control describes itself. -->
+			<button
+				onclick={() => theme.cycle()}
+				aria-label="Next theme ({theme.def.label})"
+				class="p-1"
+			>
+				<span
+					class="grid h-5 w-5 place-items-center rounded-[var(--radius)] border"
+					style="background:{theme.def.swatch[0]}; border-color:{theme.def.swatch[1]}"
+				>
+					<span class="h-2 w-2 rounded-full" style="background:{theme.def.swatch[2]}"></span>
+				</span>
 			</button>
 		</div>
 	</header>
@@ -181,6 +189,9 @@
 					</span>
 				</a>
 			{/each}
+		</div>
+		<div class="border-line/70 mt-2 border-t px-3 pt-3">
+			<ThemePicker compact />
 		</div>
 	</div>
 {/if}

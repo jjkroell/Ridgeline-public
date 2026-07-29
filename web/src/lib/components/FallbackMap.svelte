@@ -484,7 +484,7 @@
 
 	// Rebuild tiles + marker strokes when the UI theme toggles (themed bases change).
 	$effect(() => {
-		void theme.mode;
+		void theme.id;
 		const light = isLight();
 		if (!map || light === curLight) return;
 		curLight = light;

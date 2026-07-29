@@ -45,9 +45,17 @@
 	--glow-b: rgba(232, 180, 84, 0.045);
 }
 
-/* ── Light theme: a "topographic paper" inverse — warm off-white ground,
-   ink text, brown contour lines, a deeper teal accent that reads on white. */
-html.theme-light {
+/* ── Themes ────────────────────────────────────────────────────────────────
+   Each block below overrides the @theme defaults above. Selection is by the
+   `data-theme` attribute (mutually exclusive — one value at a time), so blocks
+   never compete on specificity and order here is presentational only. The
+   separate `theme-light` CLASS marks a light base and is what map-util.isLight()
+   reads; it is set by $lib/theme.svelte.ts from each theme's `light` flag.
+   The default (dark "Ridgeline") theme needs no block — it IS @theme. */
+
+/* Paper: a "topographic paper" inverse — warm off-white ground, ink text,
+   brown contour lines, a deeper teal accent that reads on white. */
+html[data-theme='light'] {
 	--color-ink: #e1e5e0;
 	--color-ink-2: #d8ddd7;
 	--color-panel: #fbfcfa;
@@ -78,6 +86,110 @@ html.theme-light {
 	--contour-color: rgba(141, 110, 74, 0.28);
 	--glow-a: rgba(15, 158, 138, 0.07);
 	--glow-b: rgba(176, 125, 30, 0.06);
+}
+
+/* Slate: deep blueprint navy. Where the default is near-black with a hint of
+   blue-green, this commits to the blue — a genuinely tinted ground, brighter
+   panel elevation and a crisp cyan accent, so it reads as depth rather than
+   as another charcoal. The highest-contrast of the dark themes. */
+html[data-theme='slate'] {
+	--color-ink: #0b1220;
+	--color-ink-2: #0e1728;
+	--color-panel: #142032;
+	--color-panel-2: #1b2a40;
+	--color-line: #24354f;
+	--color-line-bright: #35496a;
+
+	--color-fg: #e2e9f5;
+	--color-fg-dim: #93a4c0;
+	--color-fg-faint: #7286a6;
+
+	--color-signal: #5cc8ff;
+	--color-signal-deep: #2a8fc4;
+	--color-amber: #e5b45f;
+	--color-coral: #ff7b72;
+	--color-violet: #b39bf5;
+	--color-sky: #6fa8ff;
+	--color-lime: #6fd99a;
+
+	--color-role-repeater: #ff7b72;
+	--color-role-companion: #6fa8ff;
+	--color-role-room: #6fd99a;
+	--color-role-sensor: #f28ec4;
+	--color-role-observer: #b39bf5;
+
+	--contour-color: rgba(90, 140, 200, 0.2);
+	--glow-a: rgba(92, 200, 255, 0.07);
+	--glow-b: rgba(229, 180, 95, 0.04);
+}
+
+/* Graphite: warm oxide — a near-black brown ground with cream text and a
+   strong brass accent. Pushed well past neutral so it reads as warm at a
+   glance, with flatter panel elevation than Slate and the highest text
+   contrast of the set. */
+html[data-theme='graphite'] {
+	--color-ink: #14100c;
+	--color-ink-2: #1a1510;
+	--color-panel: #221b14;
+	--color-panel-2: #2b231a;
+	--color-line: #3a2f23;
+	--color-line-bright: #4d3f2e;
+
+	--color-fg: #f0e7d8;
+	--color-fg-dim: #b3a48c;
+	--color-fg-faint: #94836a;
+
+	--color-signal: #e0a63f;
+	--color-signal-deep: #a8761f;
+	--color-amber: #f0c05a;
+	--color-coral: #e07a55;
+	--color-violet: #b39bd0;
+	--color-sky: #86a8c8;
+	--color-lime: #a8bf72;
+
+	--color-role-repeater: #e07a55;
+	--color-role-companion: #86a8c8;
+	--color-role-room: #a8bf72;
+	--color-role-sensor: #d197ac;
+	--color-role-observer: #b39bd0;
+
+	--contour-color: rgba(180, 145, 95, 0.16);
+	--glow-a: rgba(224, 166, 63, 0.06);
+	--glow-b: rgba(224, 122, 85, 0.04);
+}
+
+/* Mist: a cool TINTED light — blue-grey ground rather than another off-white,
+   deep navy ink, and an indigo accent instead of teal, so it shares nothing
+   but lightness with Paper's warm cast. */
+html[data-theme='mist'] {
+	--color-ink: #dbe3ec;
+	--color-ink-2: #cfd9e5;
+	--color-panel: #f7fafd;
+	--color-panel-2: #e8eef6;
+	--color-line: #c2cfdd;
+	--color-line-bright: #a0b2c6;
+
+	--color-fg: #14202e;
+	--color-fg-dim: #46586c;
+	--color-fg-faint: #64788d;
+
+	--color-signal: #2b5fa8;
+	--color-signal-deep: #1d4478;
+	--color-amber: #9a6c14;
+	--color-coral: #c33f3f;
+	--color-violet: #5b45c9;
+	--color-sky: #1f66cc;
+	--color-lime: #147a4c;
+
+	--color-role-repeater: #c33f3f;
+	--color-role-companion: #1f66cc;
+	--color-role-room: #147a4c;
+	--color-role-sensor: #b81f63;
+	--color-role-observer: #5b45c9;
+
+	--contour-color: rgba(70, 105, 150, 0.24);
+	--glow-a: rgba(43, 95, 168, 0.07);
+	--glow-b: rgba(154, 108, 20, 0.05);
 }
 
 @layer base {

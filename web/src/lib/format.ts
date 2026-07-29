@@ -70,14 +70,36 @@ export function shortKey(key: string, head = 4, tail = 2): string {
 
 /** Compact relative time, e.g. "12s", "4m", "3h", "2d". */
 export function ago(iso?: string): string {
+	return agoFrom(iso, Date.now());
+}
+
+/** ago() against an explicit "now", so a caller holding a reactive clock can
+ *  make the label tick instead of freezing at whatever render produced it. */
+export function agoFrom(iso: string | undefined, now: number): string {
 	if (!iso) return '—';
 	const then = new Date(iso).getTime();
 	if (Number.isNaN(then)) return '—';
-	const s = Math.max(0, (Date.now() - then) / 1000);
+	const s = Math.max(0, (now - then) / 1000);
 	if (s < 60) return `${Math.floor(s)}s`;
 	if (s < 3600) return `${Math.floor(s / 60)}m`;
 	if (s < 86400) return `${Math.floor(s / 3600)}h`;
 	return `${Math.floor(s / 86400)}d`;
+}
+
+/** Wall-clock time in the viewer's LOCAL zone, seconds precision — for feed
+ *  rows you scan. (LiveGroupModal deliberately keeps its own UTC + milliseconds
+ *  format: there you're comparing observers hearing one transmission, and the
+ *  sub-second spread is the point.) */
+export function clockTime(iso?: string): string {
+	if (!iso) return '—';
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return '—';
+	return d.toLocaleTimeString(undefined, {
+		hour12: false,
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit'
+	});
 }
 
 /** Maps an SNR value (dB) to a color on the signal scale. */

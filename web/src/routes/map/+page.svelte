@@ -140,7 +140,7 @@
 	}
 
 	$effect(() => {
-		void theme.mode;
+		void theme.id;
 		const light = isLight();
 		if (!map || light === basemapLight) return;
 		basemapLight = light;

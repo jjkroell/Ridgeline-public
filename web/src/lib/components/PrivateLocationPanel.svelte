@@ -310,7 +310,7 @@
 
 	// Swap tile theme with the UI — only the themed "map" layer changes URL.
 	$effect(() => {
-		void theme.mode;
+		void theme.id;
 		const light = isLight();
 		if (!map || !tiles || light === curLight) return;
 		curLight = light;

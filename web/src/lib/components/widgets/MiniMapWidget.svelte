@@ -105,7 +105,7 @@
 
 	// Swap tiles on theme change.
 	$effect(() => {
-		void theme.mode;
+		void theme.id;
 		if (!map || !L) return;
 		const light = isLight();
 		if (light === curLight) return;

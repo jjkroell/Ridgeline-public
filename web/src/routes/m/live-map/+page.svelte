@@ -168,9 +168,9 @@
 	}
 
 	$effect(() => {
-		void theme.mode;
+		void theme.id;
 		if (!map) return;
-		const light = theme.mode === 'light';
+		const light = theme.isLight;
 		if (light === basemapLight) return;
 		basemapLight = light;
 		map.setStyle(basemapStyle(currentBasemap, light));
@@ -182,7 +182,7 @@
 		const id = basemap.id;
 		if (!map || id === currentBasemap) return;
 		currentBasemap = id;
-		basemapLight = theme.mode === 'light';
+		basemapLight = theme.isLight;
 		map.setStyle(basemapStyle(id, basemapLight));
 		map.once('idle', ensureOverlays);
 	});
@@ -206,7 +206,7 @@
 			return () => clearInterval(t);
 		}
 		currentBasemap = basemap.id;
-		basemapLight = theme.mode === 'light';
+		basemapLight = theme.isLight;
 		map = new maplibregl.Map({ container: mapEl, style: basemapStyle(currentBasemap, basemapLight), center: MAP_CENTER_LONLAT, zoom: 7, attributionControl: { compact: true } });
 		map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
 		map.on('load', () => {

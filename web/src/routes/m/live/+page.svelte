@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { live, groupLive, type LiveGroup } from '$lib/live.svelte';
-	import { ago, shortKey, fmtSnr, snrColor, roleColor } from '$lib/format';
+	import { shortKey, fmtSnr, snrColor, roleColor } from '$lib/format';
+	import { timeMode } from '$lib/time-mode.svelte';
 	import LiveGroupModal from '$lib/components/LiveGroupModal.svelte';
+	import TimeModeToggle from '$lib/components/TimeModeToggle.svelte';
 
 	let selected = $state<LiveGroup | null>(null);
 	let paused = $state(false);
@@ -21,7 +23,8 @@
 		<div class="text-fg-faint flex items-center gap-1.5 font-mono text-[0.68rem]">
 			{#if live.connected}<span class="live-dot"></span><span class="text-signal">STREAMING</span>{:else}<span class="bg-coral/70 h-2 w-2 rounded-full"></span><span class="text-coral">OFFLINE</span>{/if}
 		</div>
-		<span class="text-fg-faint ml-auto font-mono text-[0.62rem] tnum">{live.total} this session</span>
+		<span class="text-fg-faint ml-auto font-mono text-[0.62rem] tnum">{live.total}</span>
+		<TimeModeToggle compact />
 		<button onclick={togglePause} class="rounded-full border px-3 py-1 text-xs font-600 {paused ? 'border-amber/50 text-amber bg-amber/10' : 'border-line text-fg-dim'}">{paused ? 'Paused' : 'Pause'}</button>
 	</div>
 
@@ -44,7 +47,7 @@
 					</div>
 					<div class="shrink-0 text-right">
 						<div class="font-mono text-xs tnum" style="color:{snrColor(g.bestSnr)}">{fmtSnr(g.bestSnr)} dB</div>
-						<div class="text-fg-faint mt-0.5 font-mono text-[0.62rem]">{ago(g.latest)}</div>
+						<div class="text-fg-faint mt-0.5 font-mono text-[0.62rem] tnum">{timeMode.label(g.latest)}</div>
 					</div>
 				</button>
 			{/each}

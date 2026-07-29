@@ -76,7 +76,7 @@
 
 	// Swap tile theme when the UI theme toggles.
 	$effect(() => {
-		void theme.mode;
+		void theme.id;
 		const light = isLight();
 		if (!map || !tiles || light === curLight) return;
 		curLight = light;

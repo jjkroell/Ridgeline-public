@@ -6,11 +6,13 @@
 	import { live, groupLive, type LiveGroup } from '$lib/live.svelte';
 	import { channels } from '$lib/channels.svelte';
 	import { api, type Node } from '$lib/api';
-	import { ago, shortKey, roleLabel } from '$lib/format';
+	import { shortKey, roleLabel } from '$lib/format';
+	import { timeMode } from '$lib/time-mode.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import PayloadTag from '$lib/components/PayloadTag.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import LiveGroupModal from '$lib/components/LiveGroupModal.svelte';
+	import TimeModeToggle from '$lib/components/TimeModeToggle.svelte';
 	import PathModal from '$lib/components/PathModal.svelte';
 
 	let paused = $state(false);
@@ -153,6 +155,11 @@
 		if (!paused) frozen = [...live.events];
 		paused = !paused;
 	}
+
+	// The Time column is sized for "2m"/"15s"; a wall clock ("17:32:04") needs
+	// roughly double or it collides with the Type badge. Driven through a CSS
+	// var so the grid template (and its md: variant) stays declarative.
+	const timeCol = $derived(timeMode.mode === 'clock' ? '62px' : '34px');
 </script>
 
 <Seo
@@ -170,6 +177,7 @@
 			Path ⇄ {showIds ? 'IDs' : 'Names'}
 		</button>
 	</Tooltip>
+	<TimeModeToggle />
 	<button
 		onclick={togglePause}
 		class="font-mono flex items-center gap-2 rounded-[var(--radius)] border px-3 py-1.5 text-xs transition-colors
@@ -188,7 +196,8 @@
 <div class="px-6 py-6 md:px-10">
 	<div class="panel overflow-hidden">
 		<div
-			class="label border-line/70 grid grid-cols-[34px_64px_140px_64px_160px_minmax(0,1fr)] gap-x-3 border-b px-5 py-3 md:grid-cols-[34px_64px_140px_370px_64px_160px_minmax(0,1fr)]"
+			style="--tcol:{timeCol}"
+			class="label border-line/70 grid grid-cols-[var(--tcol)_64px_140px_64px_160px_minmax(0,1fr)] gap-x-3 border-b px-5 py-3 md:grid-cols-[var(--tcol)_64px_140px_370px_64px_160px_minmax(0,1fr)]"
 		>
 			<span class="text-center">Time</span>
 			<span class="text-center">Type</span>
@@ -212,9 +221,10 @@
 						onclick={() => selectGroup(g)}
 						onmousemove={(e) => showTip(e, 'Click for full packet details')}
 						onmouseleave={hideTip}
-						class="panel-hover group grid w-full grid-cols-[34px_64px_140px_64px_160px_minmax(0,1fr)] items-center gap-x-3 px-5 py-2.5 text-left text-sm md:grid-cols-[34px_64px_140px_370px_64px_160px_minmax(0,1fr)]"
+						style="--tcol:{timeCol}"
+						class="panel-hover group grid w-full grid-cols-[var(--tcol)_64px_140px_64px_160px_minmax(0,1fr)] items-center gap-x-3 px-5 py-2.5 text-left text-sm md:grid-cols-[var(--tcol)_64px_140px_370px_64px_160px_minmax(0,1fr)]"
 					>
-						<span class="font-mono text-fg-faint text-xs tnum">{ago(g.latest)}</span>
+						<span class="font-mono text-fg-faint text-xs tnum">{timeMode.label(g.latest)}</span>
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<span onmousemove={(e) => { e.stopPropagation(); hideTip(); }}>
 							<PayloadTag type={g.payloadType} />

@@ -86,10 +86,18 @@
 			}
 		</script>
 		<script>
-			// Apply the saved theme before first paint to avoid a flash.
+			// Apply the saved theme before first paint to avoid a flash. Kept in
+			// sync with THEMES in $lib/theme.svelte.ts — this runs before any module
+			// loads, so the ids and their light-base flags are duplicated here on
+			// purpose. `data-theme` picks the token block; `theme-light` marks a
+			// light base (read by map-util.isLight()).
 			try {
-				if (localStorage.getItem('ridgeline-theme') === 'light')
-					document.documentElement.classList.add('theme-light');
+				var LIGHT = { light: 1, mist: 1 };
+				var VALID = { dark: 1, slate: 1, graphite: 1, light: 1, mist: 1 };
+				var t = localStorage.getItem('ridgeline-theme');
+				if (!t || !VALID[t]) t = 'dark';
+				document.documentElement.setAttribute('data-theme', t);
+				if (LIGHT[t]) document.documentElement.classList.add('theme-light');
 			} catch (e) {}
 		</script>
 		%sveltekit.head%
