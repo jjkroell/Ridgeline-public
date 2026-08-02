@@ -29,10 +29,10 @@
 	];
 	const more = [
 		{ href: '/m/account', label: 'Account', icon: 'account', desc: 'Sign in or manage your account' },
-		{ href: '/m/map', label: 'Map', icon: 'map', desc: 'Node locations & coverage' },
+		{ href: '/m/channels', label: 'Channels', icon: 'channels', desc: 'Decrypted group chat' },
 		{ href: '/m/analytics', label: 'Analytics', icon: 'analytics', desc: 'Mesh-wide health & traffic' },
 		{ href: '/m/topology', label: 'Topology', icon: 'topology', desc: 'Relay backbone graph' },
-		{ href: '/m/channels', label: 'Channels', icon: 'channels', desc: 'Decrypted group chat' },
+		{ href: '/m/map', label: 'Map', icon: 'map', desc: 'Node locations & coverage' },
 		{ href: '/m/identity', label: 'Identity', icon: 'keys', desc: 'Collisions & key generator' },
 		{ href: '/m/observers', label: 'Observers', icon: 'observers', desc: 'Listening posts & telemetry' },
 		{ href: '/m/admin', label: 'Admin', icon: 'admin', desc: 'Injection control (restricted)' }
