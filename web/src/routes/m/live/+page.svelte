@@ -4,13 +4,19 @@
 	import { timeMode } from '$lib/time-mode.svelte';
 	import LiveGroupModal from '$lib/components/LiveGroupModal.svelte';
 	import TimeModeToggle from '$lib/components/TimeModeToggle.svelte';
+	import RouteTag from '$lib/components/RouteTag.svelte';
 
 	let selected = $state<LiveGroup | null>(null);
 	let paused = $state(false);
 	let frozen = $state<LiveGroup[]>([]);
 
+	// Troubleshooting filter, mirroring desktop: narrow to UNSCOPED floods —
+	// what a repeater set to `flood.max.unscoped 0` should never forward.
+	let unscopedOnly = $state(false);
 	const liveGroups = $derived(groupLive(live.events));
-	const groups = $derived(paused ? frozen : liveGroups);
+	const shown = $derived(paused ? frozen : liveGroups);
+	const groups = $derived(unscopedOnly ? shown.filter((g) => g.routeType === 'Flood') : shown);
+	const unscopedCount = $derived(shown.filter((g) => g.routeType === 'Flood').length);
 
 	function togglePause() {
 		if (!paused) frozen = liveGroups;
@@ -25,6 +31,15 @@
 		</div>
 		<span class="text-fg-faint ml-auto font-mono text-[0.62rem] tnum">{live.total}</span>
 		<TimeModeToggle compact />
+		<button
+			onclick={() => (unscopedOnly = !unscopedOnly)}
+			aria-pressed={unscopedOnly}
+			class="rounded-full border px-2.5 py-1 font-mono text-[0.62rem] {unscopedOnly
+				? 'border-amber/50 text-amber bg-amber/10'
+				: 'border-line text-fg-dim'}"
+		>
+			Unsc <span class="tnum">{unscopedCount}</span>
+		</button>
 		<button onclick={togglePause} class="rounded-full border px-3 py-1 text-xs font-600 {paused ? 'border-amber/50 text-amber bg-amber/10' : 'border-line text-fg-dim'}">{paused ? 'Paused' : 'Pause'}</button>
 	</div>
 
@@ -43,7 +58,10 @@
 							</span>
 							{#if g.count > 1}<span class="text-signal bg-signal/10 shrink-0 rounded px-1 py-0.5 font-mono text-[0.58rem] tnum">×{g.count}</span>{/if}
 						</div>
-						<div class="text-fg-faint mt-0.5 font-mono text-[0.62rem]">{g.payloadType}</div>
+						<div class="mt-0.5 flex items-center gap-1.5">
+							<span class="text-fg-faint font-mono text-[0.62rem]">{g.payloadType}</span>
+							<RouteTag type={g.routeType} tip={false} />
+						</div>
 					</div>
 					<div class="shrink-0 text-right">
 						<div class="font-mono text-xs tnum" style="color:{snrColor(g.bestSnr)}">{fmtSnr(g.bestSnr)} dB</div>

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import Seo from '$lib/components/Seo.svelte';
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
@@ -10,6 +12,8 @@
 	import { favorites } from '$lib/favorites.svelte';
 	import { basemapStyle, basemapHasHillshade, basemapHasLocalTerrain, collapseAttribution, ensureLocalTerrain } from '$lib/map-basemap';
 	import { basemap } from '$lib/basemap.svelte';
+	import CopyMapLink from '$lib/components/CopyMapLink.svelte';
+	import { parseMapView, hasMapView, shareUrl } from '$lib/map-share';
 	import { ensureHillshade } from '$lib/map-hillshade';
 	import { isLight, inkColor, ROLE_HEX, FAV_COLOR, locatedNodes } from '$lib/map-util';
 	import { computeCoverage, covered, distKm, type CoverageResult } from '$lib/coverage';
@@ -30,6 +34,31 @@
 	let allLocated = $state<Node[]>([]);
 	let selectedRoles = $state(new Set(['Repeater', 'RoomServer', 'ChatNode', 'Sensor']));
 	let nodeKey = $state<string | null>(null);
+
+	// ── Shareable view state ──────────────────────────────────────────────────
+	// An incoming link frames the map instead of the usual default framing, and
+	// suppresses the auto-fit so it cannot yank the recipient off the view they
+	// were sent. The camera is mirrored back into the URL as they pan.
+	const incoming = parseMapView(page.url);
+	const fromLink = hasMapView(incoming);
+
+	function currentView() {
+		const c = map?.getCenter();
+		return {
+			lat: c?.lat,
+			lon: c?.lng,
+			zoom: map?.getZoom(),
+			basemap: basemap.id,
+			roles: [...selectedRoles]
+		};
+	}
+	function linkUrl() {
+		return shareUrl(page.url, currentView());
+	}
+	function syncUrl() {
+		if (!map) return;
+		replaceState(shareUrl(page.url, currentView()), {});
+	}
 
 	const visible = $derived(allLocated.filter((n) => selectedRoles.has(n.role)));
 
@@ -325,7 +354,7 @@
 		// must still fetch even though the MapLibre source/fit below are skipped.
 		if (!map) return;
 		if (ready) updateSource();
-		if (!didFit && allLocated.length > 0) {
+		if (!didFit && !fromLink && allLocated.length > 0) {
 			fitToNodes();
 			didFit = true;
 		}
@@ -333,6 +362,8 @@
 
 	onMount(() => {
 		basemap.init();
+		if (incoming.basemap) basemap.preview(incoming.basemap);
+		if (incoming.roles) selectedRoles = new Set(incoming.roles);
 		webglOk = hasWebGL();
 		if (!webglOk) {
 			// No WebGL → skip MapLibre entirely; the Leaflet FallbackMap just needs
@@ -346,8 +377,11 @@
 		map = new maplibregl.Map({
 			container: mapEl,
 			style: basemapStyle(currentBasemap, basemapLight),
-			center: MAP_CENTER_LONLAT,
-			zoom: 9,
+			center:
+				incoming.lon != null && incoming.lat != null
+					? [incoming.lon, incoming.lat]
+					: MAP_CENTER_LONLAT,
+			zoom: incoming.zoom ?? 9,
 			attributionControl: { compact: true }
 		});
 		map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'bottom-right');
@@ -362,6 +396,7 @@
 			plot();
 		});
 		// Re-add overlays after a basemap (theme) style swap drops them.
+		map.on('moveend', syncUrl);
 		map.on('styledata', ensureOverlays);
 		const t = setInterval(plot, 10000);
 		return () => {
@@ -410,6 +445,8 @@
 			<BasemapSelector posClass={fbBanner ? 'top-16 right-3' : 'top-3 right-3'} />
 		{:else}
 		<div bind:this={mapEl} class="h-full w-full"></div>
+		<!-- Top-centre: the left and right controls both expand downward. -->
+		<div class="absolute top-3 left-1/2 z-10 -translate-x-1/2"><CopyMapLink url={linkUrl} /></div>
 		<MapRoleFilter bind:selected={selectedRoles} />
 		<BasemapSelector />
 		{/if}

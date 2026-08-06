@@ -68,14 +68,41 @@ type NodeDetail struct {
 	RecentPackets     []PacketRef    `json:"recentPackets"`
 	Neighbors         []NeighborStat `json:"neighbors"`
 	Relay             RelayStat      `json:"relay"`
-	TrafficShare      float64        `json:"trafficShare"`
-	Bridge            float64        `json:"bridge"`
+	// TrafficShare is the fraction of relayed channel time that transited this
+	// node: the summed time-on-air of the transmissions it relayed, over the
+	// summed time-on-air of every relayed transmission in the window. Weighted
+	// by airtime rather than packet count, because a long advert occupies the
+	// channel far longer than a short ack and loads the mesh accordingly.
+	TrafficShare float64 `json:"trafficShare"`
+	// RelayAirtimeMs is the absolute channel time in milliseconds that this
+	// node put on the air relaying, over the same window.
+	RelayAirtimeMs float64 `json:"relayAirtimeMs"`
+	// UnscopedRelayCount is how many UNSCOPED flood transmissions this node
+	// forwarded in the relay window. On a mesh using region scoping a correctly
+	// configured repeater runs `flood.max.unscoped 0` and forwards only
+	// region-scoped TRANSPORT_FLOOD traffic, so any non-zero count points at
+	// that node's configuration rather than at the traffic itself.
+	UnscopedRelayCount int     `json:"unscopedRelayCount,omitempty"`
+	Bridge             float64 `json:"bridge"`
 	// AdvertIntervalSec is the median seconds between the node's advert
 	// transmissions in the window — its heartbeat cadence. Nil with <2 adverts.
 	AdvertIntervalSec *float64 `json:"advertIntervalSec,omitempty"`
 	// Activity is per-hour advert-transmission counts over the window, oldest
 	// bucket first, newest last (length == WindowHours).
 	Activity []int `json:"activity"`
+	// ClockDriftSec is the node's median clock offset from the server in
+	// seconds — positive when the node runs ahead, negative when it lags.
+	// Derived from the timestamp each advert carries versus when that advert
+	// was first heard. Nil when fewer than two signature-valid adverts were
+	// seen in the window.
+	ClockDriftSec *float64 `json:"clockDriftSec,omitempty"`
+	// ClockUnset is true when the node's adverts carry a timestamp years out —
+	// the signature of a clock that was never set (MeshCore falls back to the
+	// firmware build date), rather than one that has drifted. A different
+	// fault with a different fix, so it is reported separately.
+	ClockUnset bool `json:"clockUnset,omitempty"`
+	// ClockDriftSamples is how many distinct adverts backed the clock verdict.
+	ClockDriftSamples int `json:"clockDriftSamples,omitempty"`
 }
 
 // Engine holds the latest analytics snapshot.
@@ -108,6 +135,13 @@ func (e *Engine) Get(pubkey string) (*NodeDetail, time.Time) {
 type LiveSignal struct {
 	LastRelayed  string `json:"lastRelayed,omitempty"`
 	RelayCount1h int    `json:"relayCount1h,omitempty"`
+	// ClockDriftSec / ClockUnset mirror the node's clock verdict so the nodes
+	// list can surface and sort by it without a per-node round trip.
+	ClockDriftSec *float64 `json:"clockDriftSec,omitempty"`
+	ClockUnset    bool     `json:"clockUnset,omitempty"`
+	// UnscopedRelayCount mirrors NodeDetail's, so the nodes list can flag a
+	// misconfigured repeater without a per-node round trip.
+	UnscopedRelayCount int `json:"unscopedRelayCount,omitempty"`
 }
 
 // Liveness returns the relay-activity signal for every node in the current
@@ -117,10 +151,16 @@ func (e *Engine) Liveness() map[string]LiveSignal {
 	defer e.mu.RUnlock()
 	out := make(map[string]LiveSignal, len(e.details))
 	for pk, d := range e.details {
-		if d.Relay.LastRelayed == "" && d.Relay.Count1h == 0 {
+		if d.Relay.LastRelayed == "" && d.Relay.Count1h == 0 && d.ClockDriftSec == nil && !d.ClockUnset && d.UnscopedRelayCount == 0 {
 			continue
 		}
-		out[pk] = LiveSignal{LastRelayed: d.Relay.LastRelayed, RelayCount1h: d.Relay.Count1h}
+		out[pk] = LiveSignal{
+			LastRelayed:        d.Relay.LastRelayed,
+			RelayCount1h:       d.Relay.Count1h,
+			ClockDriftSec:      d.ClockDriftSec,
+			ClockUnset:         d.ClockUnset,
+			UnscopedRelayCount: d.UnscopedRelayCount,
+		}
 	}
 	return out
 }
@@ -145,7 +185,7 @@ func (e *Engine) Recompute(st *store.Store, nodes []store.Node) error {
 	if err != nil {
 		return err
 	}
-	details := build(raws, nodes, e.windowHours, advertCutoff)
+	details := build(raws, nodes, e.windowHours, advertCutoff, DefaultRadio())
 	// Observations carry the observer's stable id (its public key); attach the
 	// friendly label so callers don't each have to resolve it.
 	if names, err := st.ObserverNames(); err == nil {
@@ -196,17 +236,18 @@ type nodeAcc struct {
 	first, last string
 	observers   map[string]*observerAcc
 	advs        []advObs
+	drift       *driftAcc
 }
 
 func newNodeAcc() *nodeAcc {
-	return &nodeAcc{observers: map[string]*observerAcc{}}
+	return &nodeAcc{observers: map[string]*observerAcc{}, drift: newDriftAcc()}
 }
 
 // build decodes the window once and produces per-node analytics.
 // build computes the snapshot. raws span the relay window; advertCutoff (an
 // RFC3339Nano timestamp) bounds advert stats to the narrower advert window so
 // the cadence sparkline and per-node advert counts ignore older transmissions.
-func build(raws []store.RawObservation, nodes []store.Node, windowHours int, advertCutoff string) map[string]*NodeDetail {
+func build(raws []store.RawObservation, nodes []store.Node, windowHours int, advertCutoff string, radio RadioParams) map[string]*NodeDetail {
 	now := time.Now()
 	today := now.UTC().Format("2006-01-02")
 
@@ -231,6 +272,13 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 		hops       []string // resolved pubkeys (unique matches only)
 		receivedAt string
 		advert     bool
+		// lengthBytes is the on-air PHY payload length, used to weight traffic
+		// share by time-on-air rather than counting every packet as one.
+		lengthBytes int
+		// unscopedFlood marks a plain FLOOD packet — one broadcast to the whole
+		// mesh with no region scope, as opposed to a region-scoped
+		// TRANSPORT_FLOOD. Relaying these is a repeater misconfiguration.
+		unscopedFlood bool
 	}
 	txPaths := map[string]*txPath{}
 
@@ -249,7 +297,11 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 					resolved = append(resolved, pk)
 				}
 			}
-			txPaths[hash] = &txPath{hops: resolved, receivedAt: ro.ReceivedAt, advert: pkt.Advert != nil}
+			txPaths[hash] = &txPath{
+				hops: resolved, receivedAt: ro.ReceivedAt, advert: pkt.Advert != nil,
+				lengthBytes:   len(ro.RawHex) / 2,
+				unscopedFlood: pkt.RouteType == meshcore.RouteFlood,
+			}
 		}
 
 		// Advert attribution → the advertising node's own stats. Bounded to the
@@ -288,6 +340,19 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 				observerID: ro.ObserverID, snr: ro.SNR, rssi: ro.RSSI, hops: pkt.PathHopCount,
 			})
 		}
+
+		// Clock evidence, over the FULL lookback rather than the narrower advert
+		// window. The advert window exists to keep the cadence sparkline and
+		// advert counts tight; a clock reading has no such need, and MeshCore's
+		// recommended ~30h advert cadence means most nodes emit fewer than the
+		// two adverts a verdict requires inside 6h.
+		//
+		// Only signature-verified adverts are trusted: a corrupted advert can
+		// carry a garbage timestamp under a garbage pubkey, and this mesh
+		// demonstrably produces those.
+		if pkt.Advert != nil && pkt.Advert.SignatureValid {
+			accFor(pkt.Advert.PublicKey).drift.observe(hash, pkt.Advert.Timestamp, parseTime(ro.ReceivedAt))
+		}
 	}
 
 	// Relay / neighbour / traffic-share over non-advert transmissions with paths.
@@ -295,6 +360,17 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 	relay1h := map[string]int{}
 	relay24h := map[string]int{}
 	relayLast := map[string]string{}
+	// relayAirMs accumulates, per relay node, the time-on-air of every
+	// transmission that transited it; totalRelayAirMs is the same sum over all
+	// relayed transmissions (counted once each). Their ratio is TrafficShare.
+	relayAirMs := map[string]float64{}
+	totalRelayAirMs := 0.0
+	// unscopedRelay counts, per node, how many UNSCOPED flood transmissions it
+	// forwarded. Once a mesh uses region scoping, a correctly configured
+	// repeater sets `flood.max.unscoped 0` and forwards only region-scoped
+	// TRANSPORT_FLOOD traffic — so a non-zero count here is a base-config
+	// problem on that node, not a property of the traffic.
+	unscopedRelay := map[string]int{}
 	edges := map[string]map[string]int{}
 	addEdge := func(a, b string) {
 		if a == b {
@@ -309,12 +385,26 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 		edges[a][b]++
 		edges[b][a]++
 	}
-	totalRelayTx := 0
 	for _, tp := range txPaths {
 		if tp.advert || len(tp.hops) == 0 {
 			continue
 		}
-		totalRelayTx++
+		// Time-on-air of this transmission. Attributed in full to every node that
+		// relayed it: each hop physically re-transmitted the packet, so each one
+		// occupied the channel for that long. Counted once per node per
+		// transmission, so a node can never exceed a 100% share.
+		air := Airtime(tp.lengthBytes, radio)
+		totalRelayAirMs += air
+		seenHop := make(map[string]bool, len(tp.hops))
+		for _, pk := range tp.hops {
+			if !seenHop[pk] {
+				seenHop[pk] = true
+				relayAirMs[pk] += air
+				if tp.unscopedFlood {
+					unscopedRelay[pk]++
+				}
+			}
+		}
 		t := parseTime(tp.receivedAt)
 		for i, pk := range tp.hops {
 			relayCount[pk]++
@@ -357,6 +447,8 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 		d.RecentPackets = recent
 		d.AdvertIntervalSec = medianInterval(txTimes)
 		d.Activity = activityBuckets(txTimes, now, windowHours)
+		d.ClockDriftSec, d.ClockUnset = a.drift.drift()
+		d.ClockDriftSamples = a.drift.samples()
 		d.FirstHeard = a.first
 		d.LastHeard = a.last
 		if a.snrN > 0 {
@@ -382,7 +474,7 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 		sort.Slice(d.Observers, func(i, j int) bool { return d.Observers[i].Count > d.Observers[j].Count })
 	}
 
-	for pk, c := range relayCount {
+	for pk := range relayCount {
 		d := ensure(pk)
 		d.Relay = RelayStat{
 			LastRelayed: relayLast[pk],
@@ -390,8 +482,10 @@ func build(raws []store.RawObservation, nodes []store.Node, windowHours int, adv
 			Count24h:    relay24h[pk],
 			Active:      relay1h[pk] > 0,
 		}
-		if totalRelayTx > 0 {
-			d.TrafficShare = float64(c) / float64(totalRelayTx)
+		d.RelayAirtimeMs = relayAirMs[pk]
+		d.UnscopedRelayCount = unscopedRelay[pk]
+		if totalRelayAirMs > 0 {
+			d.TrafficShare = relayAirMs[pk] / totalRelayAirMs
 		}
 	}
 

@@ -181,3 +181,47 @@ export function skippedNote(r: { skippedClaimed?: string[] }): string {
 	if (!n) return '';
 	return ` Left ${n} claimed node${n === 1 ? '' : 's'} untouched — a claim means the detector likely misfired; scrub by key if it really is foreign.`;
 }
+
+/** Channel time in a human unit. Airtime spans milliseconds (a short ack) to
+ *  minutes (a busy repeater over 24h), so pick the unit rather than always
+ *  printing one. */
+export function fmtAirtime(ms: number): string {
+	if (!Number.isFinite(ms) || ms <= 0) return '0 ms';
+	if (ms < 1000) return `${Math.round(ms)} ms`;
+	const sec = ms / 1000;
+	if (sec < 90) return `${sec.toFixed(1)} s`;
+	const min = sec / 60;
+	if (min < 90) return `${min.toFixed(1)} min`;
+	return `${(min / 60).toFixed(1)} h`;
+}
+
+/** A node's clock offset from the server, in words. Positive = node ahead.
+ *  Coarse on purpose: the useful question is "is this clock roughly right",
+ *  not the exact second. */
+export function fmtClockDrift(sec: number): string {
+	const a = Math.abs(sec);
+	if (a < 2) return 'in sync';
+	const dir = sec > 0 ? 'ahead' : 'behind';
+	if (a < 90) return `${Math.round(a)}s ${dir}`;
+	if (a < 5400) {
+		const m = Math.floor(a / 60);
+		const s = Math.round(a % 60);
+		return s ? `${m}m ${s}s ${dir}` : `${m}m ${dir}`;
+	}
+	if (a < 172800) {
+		const h = Math.floor(a / 3600);
+		const m = Math.round((a % 3600) / 60);
+		return m ? `${h}h ${m}m ${dir}` : `${h}h ${dir}`;
+	}
+	return `${(a / 86400).toFixed(1)} days ${dir}`;
+}
+
+/** Severity of a clock offset, for colouring. MeshCore uses advert timestamps
+ *  for ordering and replay windows, so being far out is a real fault, not
+ *  cosmetic. */
+export function clockDriftLevel(sec: number): 'ok' | 'warn' | 'bad' {
+	const a = Math.abs(sec);
+	if (a < 60) return 'ok';
+	if (a < 3600) return 'warn';
+	return 'bad';
+}

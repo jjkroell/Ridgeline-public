@@ -6,6 +6,7 @@
 	import { buildPacketFields, parseTrace, type ByteRange } from '$lib/packet-fields';
 	import PayloadTag from './PayloadTag.svelte';
 	import HopChips from './HopChips.svelte';
+	import PacketPathMap from './PacketPathMap.svelte';
 	import Tooltip from './Tooltip.svelte';
 
 	interface Props {
@@ -300,6 +301,15 @@
 						</section>
 					{/if}
 
+					<!-- Route map: one path per observer for this transmission. Only
+					     worth showing when at least one repeat carried relay hops. -->
+					{#if events.some((e) => (e.path ?? []).length > 0)}
+						<section>
+							<div class="label mb-2">Route{#if distinctPaths > 1}<span class="text-amber normal-case"> · {distinctPaths} variants across repeats</span>{/if}</div>
+							<PacketPathMap {events} nodes={nodes} />
+						</section>
+					{/if}
+
 					<!-- Repeats list -->
 					<section>
 						<div class="label mb-2">Repeats · select one for packet detail</div>
@@ -436,6 +446,13 @@
 								{#if distinctPaths > 1}<span class="text-amber normal-case">{distinctPaths} variants across repeats</span>{/if}
 							</div>
 							<HopChips hops={ev.path ?? []} {nodes} onnavigate={onclose} />
+							<!-- Just this observer's route. Keyed so drilling from one repeat to
+							     another rebuilds the map instead of reusing the previous route. -->
+							{#key ev.observerId + ev.receivedAt}
+								<div class="mt-3">
+									<PacketPathMap events={[ev]} {nodes} />
+								</div>
+							{/key}
 						</section>
 					{/if}
 

@@ -4,6 +4,56 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.7.0] — 2026-08-06
+
+### Added
+- **Per-node clock health.** Every advert carries the node's own clock, so
+  comparing it against when that advert was first heard gives the node's offset
+  from the server. Shown on node detail (desktop and mobile) and in a new CLOCK
+  HEALTH panel on Analytics listing the worst offenders. Only the earliest
+  reception of each advert counts, because MeshCore re-floods an advert payload
+  unchanged and later copies still carry the original timestamp — counting those
+  would make a healthy node look progressively further behind. Only
+  signature-verified adverts are trusted, and the median across adverts is used
+  so one queued or corrupt reading cannot move the figure. A node whose adverts
+  are stamped years out is reported separately as **never set** — MeshCore
+  falling back to the firmware build date — rather than as an absurd drift,
+  because that is a different fault with a different fix.
+- **Per-packet route map.** A transmission's detail now draws the route(s) it
+  took: one coloured path per observer, earliest reception first, with an
+  all-paths overlay and click-to-isolate. Observers routinely report different
+  paths for the same flood, so drawing them separately shows that spread instead
+  of collapsing it into a single "best" path that never existed. Drilling into a
+  single repeat shows just that observer's route. A hop whose key prefix matches
+  several located nodes is drawn dashed with hollow nodes — it is an inference,
+  not a measurement. A Trace's header path is never drawn, since those bytes are
+  per-hop SNR rather than relay hops.
+- **Shareable map links.** The map and live map (and their mobile screens) now
+  carry centre, zoom, basemap and role filter in the URL, with a Copy link
+  button. Panning updates the URL in place, so a reload keeps your view.
+  Following someone else's link never overwrites your own saved basemap
+  preference — it applies for that visit only.
+- **Flood scoping.** Per node, a count of the plain (unscoped) FLOOD
+  transmissions it forwarded, plus a FLOOD SCOPING panel on Analytics showing
+  what share of the mesh's floods carry a region scope. On a mesh using scoping,
+  a repeater running `flood.max.unscoped 0` should forward none, so a non-zero
+  count points at that node's configuration. The panel checks adoption first and
+  presents the counts as reference until scoping is actually in use, so a mesh
+  that has not adopted regions is not shown a screen full of false faults.
+- **Route flag on the feed.** Every row carries its routing mode — `FLOOD`
+  (unscoped), `T·FLOOD` (region-scoped), `DIRECT`, `T·DIRECT` — so an unscoped
+  flood is visible as it arrives rather than only in aggregate. A toolbar toggle
+  narrows the feed to unscoped floods alone, on desktop and mobile.
+
+### Changed
+- **Static Map moves directly under Live Map in the desktop navigation.**
+- **Relay traffic share is now weighted by time-on-air, not packet count.** A
+  long advert occupies the channel far longer than a short ack, but the old
+  ratio counted them equally, understating relays that carry bulk traffic and
+  overstating ones that carry chatter. The share keeps its meaning (the fraction
+  of relayed traffic transiting the node) and its scale; only the weighting
+  changes. Node detail also reports the absolute airtime a node relayed.
+
 ## [v0.6.1] — 2026-08-02
 
 ### Changed

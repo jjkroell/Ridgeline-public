@@ -10,6 +10,7 @@
 	import { timeMode } from '$lib/time-mode.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import PayloadTag from '$lib/components/PayloadTag.svelte';
+	import RouteTag from '$lib/components/RouteTag.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import LiveGroupModal from '$lib/components/LiveGroupModal.svelte';
 	import TimeModeToggle from '$lib/components/TimeModeToggle.svelte';
@@ -32,7 +33,14 @@
 		const cutoff = Date.now() - WINDOW_MS;
 		return events.filter((e) => +new Date(e.receivedAt) >= cutoff);
 	};
-	const groups = $derived(groupLive(inWindow(paused ? frozen : live.events)));
+	// Troubleshooting filter: narrow the feed to UNSCOPED floods, the packets a
+	// repeater running `flood.max.unscoped 0` should never be forwarding. Off by
+	// default — on a mesh that hasn't adopted region scoping these are simply
+	// normal traffic.
+	let unscopedOnly = $state(false);
+	const allGroups = $derived(groupLive(inWindow(paused ? frozen : live.events)));
+	const groups = $derived(unscopedOnly ? allGroups.filter((g) => g.routeType === 'Flood') : allGroups);
+	const unscopedCount = $derived(allGroups.filter((g) => g.routeType === 'Flood').length);
 
 	// Node list (loaded once) lets us resolve path-hop key prefixes to names.
 	let nodes = $state<Node[]>([]);
@@ -178,6 +186,18 @@
 		</button>
 	</Tooltip>
 	<TimeModeToggle />
+	<Tooltip text="Show only unscoped FLOOD packets — the ones a repeater set to flood.max.unscoped 0 should not forward">
+		<button
+			onclick={() => (unscopedOnly = !unscopedOnly)}
+			aria-pressed={unscopedOnly}
+			class="font-mono flex items-center gap-2 rounded-[var(--radius)] border px-3 py-1.5 text-xs transition-colors
+				{unscopedOnly
+				? 'border-amber/50 text-amber bg-amber/10'
+				: 'border-line text-fg-dim hover:border-line-bright hover:text-fg'}"
+		>
+			Unscoped <span class="tnum">{unscopedCount}</span>
+		</button>
+	</Tooltip>
 	<button
 		onclick={togglePause}
 		class="font-mono flex items-center gap-2 rounded-[var(--radius)] border px-3 py-1.5 text-xs transition-colors
@@ -197,10 +217,11 @@
 	<div class="panel overflow-hidden">
 		<div
 			style="--tcol:{timeCol}"
-			class="label border-line/70 grid grid-cols-[var(--tcol)_64px_140px_64px_160px_minmax(0,1fr)] gap-x-3 border-b px-5 py-3 md:grid-cols-[var(--tcol)_64px_140px_370px_64px_160px_minmax(0,1fr)]"
+			class="label border-line/70 grid grid-cols-[var(--tcol)_64px_74px_140px_64px_160px_minmax(0,1fr)] gap-x-3 border-b px-5 py-3 md:grid-cols-[var(--tcol)_64px_74px_140px_370px_64px_160px_minmax(0,1fr)]"
 		>
 			<span class="text-center">Time</span>
 			<span class="text-center">Type</span>
+			<span class="text-center">Route</span>
 			<span class="text-center">First Observer</span>
 			<span class="hidden text-center md:block">Path</span>
 			<span class="text-center">Repeats</span>
@@ -222,12 +243,16 @@
 						onmousemove={(e) => showTip(e, 'Click for full packet details')}
 						onmouseleave={hideTip}
 						style="--tcol:{timeCol}"
-						class="panel-hover group grid w-full grid-cols-[var(--tcol)_64px_140px_64px_160px_minmax(0,1fr)] items-center gap-x-3 px-5 py-2.5 text-left text-sm md:grid-cols-[var(--tcol)_64px_140px_370px_64px_160px_minmax(0,1fr)]"
+						class="panel-hover group grid w-full grid-cols-[var(--tcol)_64px_74px_140px_64px_160px_minmax(0,1fr)] items-center gap-x-3 px-5 py-2.5 text-left text-sm md:grid-cols-[var(--tcol)_64px_74px_140px_370px_64px_160px_minmax(0,1fr)]"
 					>
 						<span class="font-mono text-fg-faint text-xs tnum">{timeMode.label(g.latest)}</span>
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<span onmousemove={(e) => { e.stopPropagation(); hideTip(); }}>
 							<PayloadTag type={g.payloadType} />
+						</span>
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<span onmousemove={(e) => { e.stopPropagation(); hideTip(); }}>
+							<RouteTag type={g.routeType} />
 						</span>
 						<span class="text-fg truncate">{trunc15(firstObserver(g))}</span>
 						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->

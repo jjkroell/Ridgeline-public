@@ -34,6 +34,12 @@ export interface Node {
 	relayCount1h?: number;
 	/** A registered user has verified ownership of this node ("claimed" badge). */
 	claimed?: boolean;
+	/** Median clock offset from the server, seconds; positive = node ahead. */
+	clockDriftSec?: number;
+	/** Adverts stamped years out — a clock that was never set, not drift. */
+	clockUnset?: boolean;
+	/** Unscoped flood transmissions this node forwarded in the relay window. */
+	unscopedRelayCount?: number;
 }
 
 export interface ObserverStatus {
@@ -162,12 +168,41 @@ export interface NodeAnalytics {
 	recentPackets: NodePacketRef[];
 	neighbors: NodeNeighbor[];
 	relay: NodeRelay;
+	/**
+	 * Fraction of relayed channel TIME that transited this node — the summed
+	 * time-on-air of the transmissions it relayed over the summed time-on-air of
+	 * every relayed transmission in the window. Weighted by airtime, not packet
+	 * count: a long advert holds the channel far longer than a short ack.
+	 */
 	trafficShare: number;
+	/** Absolute channel time (ms) this node put on the air relaying, same window. */
+	relayAirtimeMs: number;
+	/**
+	 * UNSCOPED flood transmissions this node forwarded in the relay window. On a
+	 * mesh that uses region scoping, a correctly configured repeater runs
+	 * `flood.max.unscoped 0` and forwards only region-scoped TRANSPORT_FLOOD
+	 * traffic, so a non-zero count points at that node's config. On a mesh that
+	 * has not adopted scoping, unscoped floods are simply normal traffic.
+	 */
+	unscopedRelayCount?: number;
 	bridge: number;
 	/** Median seconds between the node's advert transmissions (heartbeat cadence). */
 	advertIntervalSec?: number;
 	/** Per-hour advert counts over the window, oldest bucket first. */
 	activity: number[];
+	/**
+	 * Median clock offset from the server in seconds — positive when the node
+	 * runs ahead. Derived from the timestamp each advert carries versus when it
+	 * was first heard. Absent with too little evidence, or when clockUnset.
+	 */
+	clockDriftSec?: number;
+	/**
+	 * The node's adverts are stamped years out — a clock that was never set
+	 * (MeshCore falls back to the firmware build date), not one that drifted.
+	 */
+	clockUnset?: boolean;
+	/** Distinct adverts backing the clock verdict. */
+	clockDriftSamples?: number;
 }
 export interface NodeDetailResponse {
 	node: Node | null;

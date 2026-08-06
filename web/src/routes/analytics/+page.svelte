@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Seo from '$lib/components/Seo.svelte';
-	import { api, type MeshAnalytics } from '$lib/api';
-	import { fmtNum, roleColor, shortKey, skewColor, fmtSkew } from '$lib/format';
+	import { api, type MeshAnalytics, type Node } from '$lib/api';
+	import { fmtNum, roleColor, shortKey, skewColor, fmtSkew, fmtClockDrift, clockDriftLevel } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RoleBadge from '$lib/components/RoleBadge.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
@@ -29,9 +29,50 @@
 	let error = $state<string | null>(null);
 	let loading = $state(true);
 
+	// Clock health comes from the nodes list (the analytics engine attaches each
+	// node's verdict there), not from the mesh summary — it is a per-node fact.
+	let nodes = $state<Node[]>([]);
+	const clockIssues = $derived(
+		nodes
+			.filter((n) => n.clockUnset || (n.clockDriftSec != null && Math.abs(n.clockDriftSec) >= 60))
+			.sort((a, b) => {
+				// Never-set clocks are the worst fault; then by magnitude.
+				if (a.clockUnset !== b.clockUnset) return a.clockUnset ? -1 : 1;
+				return Math.abs(b.clockDriftSec ?? 0) - Math.abs(a.clockDriftSec ?? 0);
+			})
+	);
+	const clockOk = $derived(
+		nodes.filter((n) => !n.clockUnset && n.clockDriftSec != null && Math.abs(n.clockDriftSec) < 60).length
+	);
+
+	// ── Flood scoping ────────────────────────────────────────────────────────
+	// A region-scoped mesh expects TRANSPORT_FLOOD; a repeater configured with
+	// `flood.max.unscoped 0` forwards no plain FLOOD at all. But that only makes
+	// a node's unscoped count a FAULT once the mesh actually uses scoping — on a
+	// mesh that hasn't adopted regions, unscoped floods are just normal traffic.
+	// So adoption is shown beside the counts and decides how they are framed.
+	const floodCounts = $derived.by(() => {
+		const by = (label: string) => data?.routeTypes?.find((r) => r.label === label)?.count ?? 0;
+		const scoped = by('TransportFlood');
+		const unscoped = by('Flood');
+		const total = scoped + unscoped;
+		return { scoped, unscoped, total, pct: total ? (scoped / total) * 100 : 0 };
+	});
+	// Below this, treat the mesh as "not scoped yet" and present the counts as
+	// information rather than as misconfiguration.
+	const SCOPING_ADOPTED_PCT = 25;
+	const scopingAdopted = $derived(floodCounts.total > 0 && floodCounts.pct >= SCOPING_ADOPTED_PCT);
+	const unscopedRelays = $derived(
+		nodes
+			.filter((n) => (n.unscopedRelayCount ?? 0) > 0)
+			.sort((a, b) => (b.unscopedRelayCount ?? 0) - (a.unscopedRelayCount ?? 0))
+	);
+
 	async function refresh() {
 		try {
-			data = await api.meshAnalytics(windowSec, bucketMin);
+			const [a, n] = await Promise.all([api.meshAnalytics(windowSec, bucketMin), api.nodes()]);
+			data = a;
+			nodes = n;
 			error = null;
 		} catch (e) {
 			error = (e as Error).message;
@@ -569,6 +610,96 @@
 				</p>
 			</section>
 		</div>
+
+		<section class="panel rise mt-6" style="animation-delay:540ms">
+			<div class="border-line/70 flex items-center justify-between border-b px-5 py-3.5">
+				<h2 class="font-display text-fg text-sm font-700 tracking-wide">CLOCK HEALTH</h2>
+				<span class="font-mono text-fg-faint text-[0.68rem]">
+					{clockIssues.length} to check · {clockOk} in sync
+				</span>
+			</div>
+			{#if clockIssues.length === 0}
+				<p class="text-fg-faint px-5 py-4 text-[0.72rem]">
+					Every node reporting a clock is within a minute of the server.
+				</p>
+			{:else}
+				<div class="max-h-96 overflow-y-auto">
+					{#each clockIssues as n (n.publicKey)}
+						{@const lvl = n.clockUnset ? 'bad' : clockDriftLevel(n.clockDriftSec ?? 0)}
+						{@const col = lvl === 'bad' ? 'var(--color-coral)' : 'var(--color-amber)'}
+						<a
+							href="/nodes/{n.publicKey}"
+							class="border-line/40 hover:bg-panel-2 flex items-center gap-3 border-b px-5 py-2 last:border-b-0"
+						>
+							<RoleBadge role={n.role} />
+							<span class="text-fg flex-1 truncate text-xs">{n.name || shortKey(n.publicKey)}</span>
+							<span class="font-mono text-[0.7rem] tnum" style="color:{col}">
+								{n.clockUnset ? 'never set' : fmtClockDrift(n.clockDriftSec ?? 0)}
+							</span>
+						</a>
+					{/each}
+				</div>
+			{/if}
+			<p class="text-fg-faint border-line/50 border-t px-5 py-3 text-[0.7rem] leading-relaxed">
+				Each advert carries the node's own clock. Comparing that against when the advert was first heard
+				gives its offset — re-floods are ignored, so only the first reception of each advert counts.
+				<strong class="text-fg-dim">Never set</strong> means the adverts are stamped years out, which is MeshCore
+				falling back to the firmware build date rather than a clock that drifted.
+			</p>
+		</section>
+
+		<section class="panel rise mt-6" style="animation-delay:580ms">
+			<div class="border-line/70 flex items-center justify-between border-b px-5 py-3.5">
+				<h2 class="font-display text-fg text-sm font-700 tracking-wide">FLOOD SCOPING</h2>
+				<span class="font-mono text-fg-faint text-[0.68rem]">
+					{floodCounts.pct.toFixed(1)}% of floods region-scoped
+				</span>
+			</div>
+
+			<div class="border-line/50 grid grid-cols-2 gap-px border-b sm:grid-cols-3">
+				{#each [{ k: 'Transport (scoped)', v: floodCounts.scoped }, { k: 'Plain (unscoped)', v: floodCounts.unscoped }, { k: 'Nodes relaying unscoped', v: unscopedRelays.length }] as s (s.k)}
+					<div class="px-5 py-3">
+						<div class="label">{s.k}</div>
+						<div class="font-mono text-fg text-lg tnum">{fmtNum(s.v)}</div>
+					</div>
+				{/each}
+			</div>
+
+			{#if !scopingAdopted}
+				<p class="text-fg-faint px-5 py-3 text-[0.7rem] leading-relaxed">
+					This mesh has <strong class="text-fg-dim">not adopted region scoping</strong> — only
+					{floodCounts.pct.toFixed(1)}% of floods carry a transport scope. Relaying unscoped floods is
+					therefore normal here, not a fault, so the counts below are listed for reference only. They
+					become a configuration signal once scoping is in use.
+				</p>
+			{:else}
+				<p class="text-fg-faint px-5 py-3 text-[0.7rem] leading-relaxed">
+					This mesh uses region scoping. A repeater configured with
+					<code class="text-fg-dim">flood.max.unscoped 0</code> forwards no plain floods, so the nodes
+					below are forwarding traffic their configuration should be dropping.
+				</p>
+			{/if}
+
+			{#if unscopedRelays.length}
+				<div class="border-line/50 max-h-80 overflow-y-auto border-t">
+					{#each unscopedRelays.slice(0, 40) as n (n.publicKey)}
+						<a
+							href="/nodes/{n.publicKey}"
+							class="border-line/40 hover:bg-panel-2 flex items-center gap-3 border-b px-5 py-2 last:border-b-0"
+						>
+							<RoleBadge role={n.role} />
+							<span class="text-fg flex-1 truncate text-xs">{n.name || shortKey(n.publicKey)}</span>
+							<span
+								class="font-mono text-[0.7rem] tnum"
+								style="color:{scopingAdopted ? 'var(--color-amber)' : 'var(--color-fg-dim)'}"
+							>
+								{fmtNum(n.unscopedRelayCount ?? 0)}
+							</span>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</section>
 
 		<div class="text-fg-faint mt-6 text-center font-mono text-[0.62rem]">
 			radio {radioLabel} · window {data.windowHours.toFixed(1)}h · generated {fmtTime(data.generatedAt)}

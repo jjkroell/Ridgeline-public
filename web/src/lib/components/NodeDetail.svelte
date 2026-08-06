@@ -10,7 +10,7 @@
 	import { isLight } from '$lib/map-util';
 	import { hasWebGL } from '$lib/webgl';
 	import LeafletInset from './LeafletInset.svelte';
-	import { ago, shortKey, fmtCoord, fmtSnr, snrColor, roleColor, roleLabel, nodeStatus, fmtRadio } from '$lib/format';
+	import { ago, shortKey, fmtCoord, fmtSnr, snrColor, roleColor, roleLabel, nodeStatus, fmtRadio, fmtAirtime, fmtClockDrift, clockDriftLevel } from '$lib/format';
 	import { nodeHashId } from '$lib/hash-ids';
 	import PayloadTag from './PayloadTag.svelte';
 	import RoleBadge from './RoleBadge.svelte';
@@ -193,6 +193,17 @@
 		const avgSnr = { k: 'Avg SNR', v: detail?.avgSnr != null ? detail.avgSnr.toFixed(1) + ' dB' : '—' };
 		const location = { k: 'Location', v: fmtCoord(node.latitude, node.longitude) };
 		const radio = { k: 'Radio', v: fmtRadio(node.radio) };
+		// Clock health from the timestamp the node stamps into its adverts.
+		const driftColor = { ok: 'var(--color-fg)', warn: 'var(--color-amber)', bad: 'var(--color-coral)' };
+		const clock = detail?.clockUnset
+			? { k: 'Clock', v: 'never set', c: 'var(--color-coral)' }
+			: detail?.clockDriftSec != null
+				? {
+						k: 'Clock',
+						v: fmtClockDrift(detail.clockDriftSec),
+						c: driftColor[clockDriftLevel(detail.clockDriftSec)]
+					}
+				: { k: 'Clock', v: '—', c: 'var(--color-fg-faint)' };
 		if (compact) {
 			return [
 				{ k: 'Status', v: status.label, c: status.color },
@@ -215,6 +226,12 @@
 			{ k: 'Packets today', v: detail ? String(detail.packetsToday) : '—' },
 			{ k: 'Adverts (all-time)', v: String(node.advertTxCount) },
 			{ k: 'Advert cadence', v: cadence(detail?.advertIntervalSec) },
+			clock,
+			{
+				k: 'Unscoped floods',
+				v: detail?.unscopedRelayCount ? `${detail.unscopedRelayCount} relayed / 24h` : '—',
+				c: detail?.unscopedRelayCount ? 'var(--color-fg)' : 'var(--color-fg-faint)'
+			},
 			avgSnr,
 			{ k: 'Avg hops', v: detail?.avgHops != null ? detail.avgHops.toFixed(1) : '—' }
 		];
@@ -485,12 +502,15 @@
 						</div>
 							<div class="py-2">
 							<div class="mb-1 flex items-center justify-between">
-								<Tooltip text="Fraction of relayed traffic that transited this node (24h window)"><span class="label normal-case">Traffic share</span></Tooltip>
+								<Tooltip text="Share of relayed channel TIME that transited this node (24h window). Weighted by time-on-air, so a long advert counts for more than a short ack."><span class="label normal-case">Traffic share</span></Tooltip>
 								<span class="font-mono text-xs" style="color:{tl.color}">{(detail.trafficShare * 100).toFixed(1)}% · {tl.label}</span>
 							</div>
 							<div class="bg-panel-2 h-1.5 w-full overflow-hidden rounded-full">
 								<div class="h-full rounded-full" style="width:{Math.max(2, detail.trafficShare * 100)}%;background:{tl.color}"></div>
 							</div>
+							{#if detail.relayAirtimeMs > 0}
+								<div class="text-fg-faint mt-1 text-right font-mono text-[0.62rem] tnum">{fmtAirtime(detail.relayAirtimeMs)} on air</div>
+							{/if}
 						</div>
 							<div class="py-2">
 							<div class="mb-1 flex items-center justify-between">

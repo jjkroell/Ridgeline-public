@@ -26,6 +26,14 @@ class Basemap {
 			/* storage unavailable */
 		}
 	}
+
+	/** Apply a basemap for this visit WITHOUT persisting it. Used when a shared
+	 *  link specifies one: the sender's choice should frame what the recipient
+	 *  sees, but must not overwrite the preference they chose for themselves. */
+	preview(id: string) {
+		if (!BASEMAP_IDS.has(id)) return;
+		this.id = id;
+	}
 }
 
 export const basemap = new Basemap();

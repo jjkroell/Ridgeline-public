@@ -52,6 +52,55 @@ export function resolvePath(
 	return { pts: resolved.filter((p): p is LngLat => p !== null), uncertain };
 }
 
+/** One hop of a path, resolved as far as the data honestly allows. */
+export interface ResolvedHop {
+	/** The raw key prefix carried in the packet. */
+	hop: string;
+	/** The node it resolved to, or null when nothing located matches. */
+	node: Node | null;
+	/**
+	 * True when more than one located node matched this prefix. The chosen node
+	 * is a best guess (nearest a confident neighbour), NOT a fact — callers that
+	 * present a route to a human must show these differently, or omit them.
+	 */
+	ambiguous: boolean;
+}
+
+// resolvePathNodes is resolvePath's per-hop sibling: same matching and
+// disambiguation rules, but it reports WHICH node each hop resolved to and how
+// confident that is, which a route drawn for a human needs and a comet
+// animation does not. Kept beside resolvePath so the two rules cannot drift.
+export function resolvePathNodes(located: Node[], path: string[]): ResolvedHop[] {
+	const cands: Node[][] = path.map((hop) => {
+		let c = located.filter((n) => n.publicKey.startsWith(hop));
+		const reps = c.filter((n) => n.role === 'Repeater');
+		if (reps.length) c = reps;
+		return c;
+	});
+
+	const out: ResolvedHop[] = path.map((hop, i) => ({
+		hop,
+		node: cands[i].length === 1 ? cands[i][0] : null,
+		ambiguous: cands[i].length > 1
+	}));
+
+	// Second pass: for ambiguous hops, pick the candidate nearest the closest
+	// already-confident hop — the same anchoring rule the animation uses.
+	for (let i = 0; i < cands.length; i++) {
+		if (out[i].node || cands[i].length === 0) continue;
+		let ref: Node | null = null;
+		for (let d = 1; d < cands.length && !ref; d++) {
+			if (i - d >= 0 && out[i - d].node && !out[i - d].ambiguous) ref = out[i - d].node;
+			else if (i + d < cands.length && out[i + d].node && !out[i + d].ambiguous) ref = out[i + d].node;
+		}
+		const p = (n: Node): LngLat => [n.longitude!, n.latitude!];
+		out[i].node = ref
+			? cands[i].reduce((best, n) => (dist2(p(n), p(ref!)) < dist2(p(best), p(ref!)) ? n : best))
+			: cands[i][0];
+	}
+	return out;
+}
+
 interface Anim {
 	pts: LngLat[];
 	seglen: number[]; // cumulative length at each vertex

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
 	import { goto } from '$app/navigation';
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
@@ -9,6 +11,8 @@
 	import { theme } from '$lib/theme.svelte';
 	import { basemapStyle, basemapHasHillshade, basemapHasLocalTerrain, collapseAttribution, ensureLocalTerrain } from '$lib/map-basemap';
 	import { basemap } from '$lib/basemap.svelte';
+	import CopyMapLink from '$lib/components/CopyMapLink.svelte';
+	import { parseMapView, hasMapView, shareUrl } from '$lib/map-share';
 	import { ensureHillshade } from '$lib/map-hillshade';
 	import { ROLE_HEX, locatedNodes } from '$lib/map-util';
 	import { MAP_CENTER_LONLAT } from '$lib/site';
@@ -23,6 +27,22 @@
 	let nodes = $state<Node[]>([]);
 	let basemapLight = false;
 	let didFit = false;
+
+	// Shareable view state. A link frames the map (suppressing the auto-fit)
+	// and previews its basemap without persisting it over the viewer's own.
+	const incoming = parseMapView(page.url);
+	const fromLink = hasMapView(incoming);
+	function currentView() {
+		const c = map?.getCenter();
+		return { lat: c?.lat, lon: c?.lng, zoom: map?.getZoom(), basemap: basemap.id };
+	}
+	function linkUrl() {
+		return shareUrl(page.url, currentView());
+	}
+	function syncUrl() {
+		if (!map) return;
+		replaceState(shareUrl(page.url, currentView()), {});
+	}
 	let pulseCount = $state(0);
 
 	// resolve a path-hop prefix to a located node's coordinates (unique prefix)
@@ -160,7 +180,7 @@
 		if (!map.getSource('nodes')) addLayers();
 	}
 	function fit() {
-		if (!map || didFit || nodes.length === 0) return;
+		if (!map || didFit || fromLink || nodes.length === 0) return;
 		const b = new maplibregl.LngLatBounds();
 		for (const n of nodes) b.extend([n.longitude!, n.latitude!]);
 		map.fitBounds(b, { padding: 56, maxZoom: 11, duration: 0 });
@@ -199,6 +219,7 @@
 
 	onMount(() => {
 		basemap.init();
+		if (incoming.basemap) basemap.preview(incoming.basemap);
 		webglOk = hasWebGL();
 		if (!webglOk) {
 			refresh();
@@ -207,7 +228,8 @@
 		}
 		currentBasemap = basemap.id;
 		basemapLight = theme.isLight;
-		map = new maplibregl.Map({ container: mapEl, style: basemapStyle(currentBasemap, basemapLight), center: MAP_CENTER_LONLAT, zoom: 7, attributionControl: { compact: true } });
+		map = new maplibregl.Map({ container: mapEl, style: basemapStyle(currentBasemap, basemapLight), center: incoming.lon != null && incoming.lat != null ? [incoming.lon, incoming.lat] : MAP_CENTER_LONLAT, zoom: incoming.zoom ?? 7, attributionControl: { compact: true } });
+		map.on('moveend', syncUrl);
 		map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
 		map.on('load', () => {
 			if (!map) return;
@@ -238,6 +260,7 @@
 		<BasemapSelector compact posClass={fbBanner ? 'top-16 left-3' : 'top-3 left-3'} />
 	{:else}
 	<div bind:this={mapEl} class="h-full w-full"></div>
+	<div class="absolute top-3 left-3 z-20"><CopyMapLink url={linkUrl} compact /></div>
 	<div class="border-line/60 bg-ink-2/80 absolute top-3 left-3 z-10 flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md">
 		{#if live.connected}<span class="live-dot"></span>{:else}<span class="bg-coral/70 h-2 w-2 rounded-full"></span>{/if}
 		<span class="text-fg-dim font-mono text-[0.62rem] tnum">{nodes.length} nodes · {pulseCount} live</span>

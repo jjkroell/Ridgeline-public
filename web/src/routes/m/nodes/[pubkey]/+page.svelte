@@ -5,7 +5,7 @@
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import QRCode from 'qrcode';
 	import { api, type Node, type NodeAnalytics, type NodeObserverStat, type BlockEntry } from '$lib/api';
-	import { ago, shortKey, fmtNum, fmtSnr, snrColor, roleColor, roleLabel, nodeStatus, fmtRadio, fmtCoord } from '$lib/format';
+	import { ago, shortKey, fmtNum, fmtSnr, snrColor, roleColor, roleLabel, nodeStatus, fmtRadio, fmtCoord, fmtAirtime, fmtClockDrift, clockDriftLevel } from '$lib/format';
 	import { nodeHashId } from '$lib/hash-ids';
 	import { favorites } from '$lib/favorites.svelte';
 	import { basemapStyleUrl, collapseAttribution } from '$lib/map-basemap';
@@ -94,7 +94,18 @@
 					{ k: 'Adverts (all-time)', v: fmtNum(node.advertTxCount) },
 					{ k: 'Avg SNR', v: detail?.avgSnr != null ? detail.avgSnr.toFixed(1) + ' dB' : '—', c: snrColor(detail?.avgSnr) },
 					{ k: 'Avg hops', v: detail?.avgHops != null ? detail.avgHops.toFixed(1) : '—' },
-					{ k: 'Advert cadence', v: cadence(detail?.advertIntervalSec) }
+					{ k: 'Advert cadence', v: cadence(detail?.advertIntervalSec) },
+					detail?.clockUnset
+						? { k: 'Clock', v: 'never set', c: 'var(--color-coral)' }
+						: detail?.clockDriftSec != null
+							? {
+									k: 'Clock',
+									v: fmtClockDrift(detail.clockDriftSec),
+									c: { ok: 'var(--color-fg)', warn: 'var(--color-amber)', bad: 'var(--color-coral)' }[
+										clockDriftLevel(detail.clockDriftSec)
+									]
+								}
+							: { k: 'Clock', v: '—' }
 				]
 			: []
 	);
@@ -252,7 +263,7 @@
 						<span class="text-fg-faint w-10 text-right font-mono text-xs tnum">{(r.v * 100).toFixed(0)}%</span>
 					</div>
 				{/each}
-				<div class="text-fg-faint mt-1 font-mono text-[0.62rem]">relayed {fmtNum(detail.relay.count24h)}× / 24h{#if detail.relay.count1h} · {detail.relay.count1h}× last hr{/if}</div>
+				<div class="text-fg-faint mt-1 font-mono text-[0.62rem]">relayed {fmtNum(detail.relay.count24h)}× / 24h{#if detail.relay.count1h} · {detail.relay.count1h}× last hr{/if}{#if detail.relayAirtimeMs > 0} · {fmtAirtime(detail.relayAirtimeMs)} on air{/if}</div>
 			</div>
 		{/if}
 

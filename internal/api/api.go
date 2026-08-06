@@ -332,6 +332,13 @@ type nodeWithLiveness struct {
 	RelayCount1h int    `json:"relayCount1h,omitempty"`
 	// Claimed reports that the node has a verified owner (public "claimed" badge).
 	Claimed bool `json:"claimed,omitempty"`
+	// Clock health, so the nodes list can flag a wrong clock without fetching
+	// each node's detail. See analytics.NodeDetail for the derivation.
+	ClockDriftSec *float64 `json:"clockDriftSec,omitempty"`
+	ClockUnset    bool     `json:"clockUnset,omitempty"`
+	// Unscoped flood relays — a repeater base-config problem. See
+	// analytics.NodeDetail.UnscopedRelayCount.
+	UnscopedRelayCount int `json:"unscopedRelayCount,omitempty"`
 }
 
 func (s *Server) nodes(w http.ResponseWriter, _ *http.Request) {
@@ -358,6 +365,9 @@ func (s *Server) nodes(w http.ResponseWriter, _ *http.Request) {
 		if sig, ok := live[n.PublicKey]; ok {
 			nw.LastRelayed = sig.LastRelayed
 			nw.RelayCount1h = sig.RelayCount1h
+			nw.ClockDriftSec = sig.ClockDriftSec
+			nw.ClockUnset = sig.ClockUnset
+			nw.UnscopedRelayCount = sig.UnscopedRelayCount
 		}
 		nw.Claimed = claimed[strings.ToUpper(n.PublicKey)]
 		out = append(out, nw)

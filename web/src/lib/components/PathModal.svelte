@@ -5,6 +5,7 @@
 	import PayloadTag from './PayloadTag.svelte';
 	import Modal from './Modal.svelte';
 	import HopChips from './HopChips.svelte';
+	import PacketPathMap from './PacketPathMap.svelte';
 
 	interface Props {
 		group: LiveGroup | null;
@@ -45,12 +46,20 @@
 			{#if path.length === 0}
 				<div class="text-fg-faint text-sm">Direct transmission — no relay hops recorded.</div>
 			{:else}
-				{#if variants > 1}
-					<div class="label text-amber mb-3 normal-case">
-						Showing the most complete route · {variants} variants seen across repeats (open the packet for per-repeat paths)
+				<!-- The route(s) on a map: one per observer, so differing branches of
+				     the same flood are visible rather than collapsed into one line. -->
+				{#key group.messageHash}
+					<PacketPathMap events={group.events} {nodes} />
+				{/key}
+
+				<div class="border-line/50 mt-4 border-t pt-4">
+					<div class="label mb-2">
+						Most complete route{#if variants > 1}
+							<span class="text-amber normal-case"> · {variants} variants across repeats</span>
+						{/if}
 					</div>
-				{/if}
-				<HopChips hops={path} {nodes} {showIds} onnavigate={onclose} />
+					<HopChips hops={path} {nodes} {showIds} onnavigate={onclose} />
+				</div>
 			{/if}
 		</div>
 	</Modal>
