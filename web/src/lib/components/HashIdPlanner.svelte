@@ -327,8 +327,14 @@
 						</div>
 						<ul class="space-y-1">
 							{#each g.nodes as n (n.publicKey)}
-								<li class="flex items-center gap-2 text-sm">
-									<span class="text-fg min-w-0 truncate">{n.name || '(unnamed)'}</span>
+								<!-- On a phone the badges (role + advert width + no-GPS) are all
+								     shrink-0 and consume ~230 of ~290px, leaving the name about 60px —
+								     i.e. unreadable. Let the row wrap and give the name its own full
+								     line; the badges follow underneath. -->
+								<li class="flex items-center gap-2 text-sm {compact ? 'flex-wrap' : ''}">
+									<span class="text-fg min-w-0 truncate {compact ? 'w-full' : ''}"
+										>{n.name || '(unnamed)'}</span
+									>
 									<span class="shrink-0"><RoleBadge role={n.role} /></span>
 									{#if n.hashSize === 1 || n.hashSize === 2 || n.hashSize === 3}
 										<Tooltip
@@ -353,14 +359,20 @@
 											>
 										</Tooltip>
 									{/if}
-									<button
-										onclick={() => copy(n.publicKey, n.publicKey)}
-										class="text-fg-faint hover:text-signal ml-auto shrink-0 font-mono text-xs"
-									>
-										<Tooltip text="Copy full public key"
-											>{copied === n.publicKey ? 'copied' : shortKey(n.publicKey, 6, 4)}</Tooltip
+									<!-- The key is dropped on narrow screens. Everything else in this row
+									     is shrink-0, so the name is the only thing that can give — and on a
+									     phone it gave all of it, leaving the row unreadable. The key is
+									     still one tap away on the node itself. -->
+									{#if !compact}
+										<button
+											onclick={() => copy(n.publicKey, n.publicKey)}
+											class="text-fg-faint hover:text-signal ml-auto shrink-0 font-mono text-xs"
 										>
-									</button>
+											<Tooltip text="Copy full public key"
+												>{copied === n.publicKey ? 'copied' : shortKey(n.publicKey, 6, 4)}</Tooltip
+											>
+										</button>
+									{/if}
 								</li>
 							{/each}
 						</ul>

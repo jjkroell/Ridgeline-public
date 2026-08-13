@@ -62,7 +62,10 @@
 	// the claim, so these entries have no node page to release from — without an
 	// action here they are unremovable. DELETE /api/claims/{pubkey} never touches
 	// the nodes table, so it works fine with the node gone.
-	let releasing = $state('');
+	// Which row + which action is in flight, so each button shows its own
+	// progress rather than both going quiet. A destructive click that gives no
+	// feedback reads as a broken page.
+	let busy = $state<{ key: string; kind: 'release' | 'delete' } | null>(null);
 	let releaseErr = $state('');
 
 	// A dormant node's row is already gone, so releasing the claim leaves the
@@ -70,14 +73,14 @@
 	// but its only other entry point is the node detail page — which does not
 	// exist for a dormant node. Hence this second, explicit action.
 	async function purgeClaim(pubkey: string, name: string) {
-		if (releasing) return;
+		if (busy) return;
 		if (
 			!confirm(
 				`Delete everything for ${name}?\n\nRemoves your claim, your notes, and any private location for this node. It cannot be undone.`
 			)
 		)
 			return;
-		releasing = pubkey;
+		busy = { key: pubkey, kind: 'delete' };
 		releaseErr = '';
 		try {
 			await nodeLifecycle.scrub(auth.csrf, pubkey);
@@ -85,15 +88,15 @@
 		} catch (e) {
 			releaseErr = e instanceof Error ? e.message : 'Could not delete this node';
 		} finally {
-			releasing = '';
+			busy = null;
 		}
 	}
 
 	async function releaseClaim(pubkey: string, name: string) {
-		if (releasing) return;
+		if (busy) return;
 		if (!confirm(`Release your claim on ${name}?\n\nThis node is no longer in the mesh. If it advertises again it will come back unclaimed, and you (or anyone) can claim it then.`))
 			return;
-		releasing = pubkey;
+		busy = { key: pubkey, kind: 'release' };
 		releaseErr = '';
 		try {
 			await claims.release(auth.csrf, pubkey);
@@ -101,7 +104,7 @@
 		} catch (e) {
 			releaseErr = e instanceof Error ? e.message : 'Could not release the claim';
 		} finally {
-			releasing = '';
+			busy = null;
 		}
 	}
 	async function loadMyNodes() {
@@ -280,20 +283,32 @@
 								</Tooltip>
 								<!-- A dormant claim has no node page, so this is the only place it can
 								     be released from. -->
-								<button
-									onclick={() => releaseClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
-									disabled={releasing === c.nodePubkey}
-									class="text-fg-faint hover:text-fg shrink-0 text-xs underline underline-offset-2 transition-colors disabled:opacity-50"
-									title="Give up ownership. Your notes on this node are kept."
-									>{releasing === c.nodePubkey ? 'Releasing…' : 'Release'}</button
+								<Tooltip
+									text="Give up ownership. Your notes on this node are kept."
+									class="shrink-0"
 								>
-								<button
-									onclick={() => purgeClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
-									disabled={releasing === c.nodePubkey}
-									class="text-fg-faint hover:text-coral shrink-0 text-xs underline underline-offset-2 transition-colors disabled:opacity-50"
-									title="Remove the claim, your notes and any private location for this node."
-									>Delete everything</button
+									<button
+										onclick={() => releaseClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
+										disabled={busy?.key === c.nodePubkey}
+										class="text-fg-faint hover:text-fg text-xs underline underline-offset-2 transition-colors disabled:opacity-50"
+										>{busy?.key === c.nodePubkey && busy.kind === 'release'
+											? 'Releasing…'
+											: 'Release'}</button
+									>
+								</Tooltip>
+								<Tooltip
+									text="Remove the claim, your notes and any private location for this node."
+									class="shrink-0"
 								>
+									<button
+										onclick={() => purgeClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
+										disabled={busy?.key === c.nodePubkey}
+										class="text-fg-faint hover:text-coral text-xs underline underline-offset-2 transition-colors disabled:opacity-50"
+										>{busy?.key === c.nodePubkey && busy.kind === 'delete'
+											? 'Deleting…'
+											: 'Delete everything'}</button
+									>
+								</Tooltip>
 							{:else if c.status === 'verified'}
 								<span class="bg-signal/15 text-signal rounded-full px-2.5 py-1 text-xs font-600"
 									>Owned</span

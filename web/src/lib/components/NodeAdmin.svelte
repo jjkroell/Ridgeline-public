@@ -282,8 +282,12 @@
 					{nodeName}
 					{retired}
 					onchange={(state) => {
+						// Deliberately do NOT close on 'scrubbed'. Closing the instant the
+						// request succeeded made a destructive action look like a no-op: the
+						// modal vanished, the (now deleted) node page stayed on screen, and
+						// nothing said what had happened. The panel shows its own summary and
+						// offers the way out.
 						loadSummary();
-						if (state === 'scrubbed') close();
 					}}
 				/>
 			{/if}

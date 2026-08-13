@@ -4,6 +4,24 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.1] — 2026-08-13
+
+### Fixed
+- **Destructive actions now show they registered.** Deleting a claimed node, or
+  clearing a dormant claim, gave no sign anything had happened: the buttons kept
+  their idle labels while the request was in flight, and on the node page the
+  dialog closed the instant the delete succeeded — throwing away the summary of
+  what had been removed and leaving the deleted node still on screen. Buttons
+  now report their own progress and disable their siblings, and the node dialog
+  stays open to show what was deleted with a way back to the node list.
+- **Tooltips on the claim actions** use the app's own tooltip rather than raw
+  browser title text, so they match everything else.
+- **Node names are readable in collision groups on a phone.** On the identity
+  page every badge in a row is fixed-width, so the name — the only thing able to
+  give — was squeezed to about 60px and became unreadable. On narrow screens the
+  row now wraps, giving the name its own line, and the public key is dropped
+  since it is noise on a phone and remains one tap away on the node itself.
+
 ## [v0.9.0] — 2026-08-13
 
 ### Added

@@ -8,16 +8,19 @@
 	// receivers recorded.
 	import { nodeLifecycle, type ScrubResult } from '$lib/api';
 	import { auth } from '$lib/auth.svelte';
+	import { goto } from '$app/navigation';
 
 	interface Props {
 		pubkey: string;
 		nodeName: string;
+		/** Mobile (/m) variant — used to route the exit link correctly. */
+		compact?: boolean;
 		/** Whether the node is currently retired, from the node record. */
 		retired?: boolean;
 		/** Called after a successful action so the parent can refresh. */
 		onchange?: (state: 'retired' | 'active' | 'scrubbed') => void;
 	}
-	let { pubkey, nodeName, retired = false, onchange }: Props = $props();
+	let { pubkey, nodeName, compact = false, retired = false, onchange }: Props = $props();
 
 	let busy = $state(false);
 	let err = $state('');
@@ -60,6 +63,13 @@
 				If this node advertises again it will reappear as an unclaimed node, and anyone may claim
 				it.
 			</p>
+			<!-- The page behind this modal is showing a node that no longer exists, so
+			     offer the exit rather than leaving the reader on a stale view. -->
+			<button
+				onclick={() => goto(compact ? '/m/nodes' : '/nodes')}
+				class="border-line text-fg-dim hover:border-line-bright hover:text-fg mt-3 rounded-[var(--radius)] border px-3 py-1.5 text-sm transition-colors"
+				>Back to nodes</button
+			>
 		</div>
 	{:else}
 		<!-- Retire -->
@@ -90,7 +100,7 @@
 				disabled={busy}
 				class="border-line text-fg-dim hover:border-line-bright hover:text-fg rounded-[var(--radius)] border px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
 			>
-				{retired ? 'Put back on the map' : 'Retire this node'}
+				{busy ? 'Working…' : retired ? 'Put back on the map' : 'Retire this node'}
 			</button>
 		</div>
 
