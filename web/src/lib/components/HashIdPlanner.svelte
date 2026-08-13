@@ -84,6 +84,13 @@
 	const want = $derived(byteLen * 2);
 	// Every path-participating node is exposed at whatever width the sender picks.
 	const pathNodeCount = $derived(nodes.filter(isPathNode).length);
+	// Nodes inside a collision group whose OWN adverts use the selected width.
+	// These are not innocent bystanders: they originate narrow paths themselves,
+	// so their operator has a change to make. Everyone else in the group appears
+	// only because somebody else's packet was narrow.
+	const selfNarrow = $derived(
+		groups.flatMap((g) => g.nodes).filter((n) => n.hashSize === byteLen)
+	);
 
 	// Same-length path nodes occupying the typed prefix (shown when it's in use).
 	const occupants = $derived(
@@ -274,14 +281,34 @@
 				class="border-signal/40 bg-signal/5 mb-3 rounded-[var(--radius)] border px-3 py-2.5 text-xs"
 			>
 				<span class="text-signal">Who fixes this:</span>
-				<span class="text-fg-dim"
-					>not the nodes listed below. They appear at {byteLen} byte{byteLen > 1 ? 's' : ''} because
-					something <em>sent</em> a {byteLen}-byte packet through them. The ambiguity goes away when
-					the senders — companions, apps and bots — move to a wider path.
-					<a href="{compact ? '/m' : ''}/hash-ids#companions" class="text-signal hover:underline"
-						>How to change a sender →</a
-					></span
-				>
+				<span class="text-fg-dim">
+					{#if selfNarrow.length}
+						<span class="text-fg"
+							>{selfNarrow.length} of the nodes below advertise at {byteLen} byte{byteLen > 1
+								? 's'
+								: ''} themselves</span
+						>
+						(marked <span class="text-amber">{byteLen}B</span>) — they originate narrow paths, so
+						their operators can fix that directly with
+						<code class="text-fg-dim font-mono text-[0.7rem]">set path.hash.mode</code>.
+						<a href="{compact ? '/m' : ''}/hash-ids#repeaters" class="text-signal hover:underline"
+							>How →</a
+						>
+						The rest appear here only because something <em>else</em> sent a {byteLen}-byte packet
+						through them; that traffic comes mostly from companions, apps and bots.
+						<a href="{compact ? '/m' : ''}/hash-ids#companions" class="text-signal hover:underline"
+							>How to change a sender →</a
+						>
+					{:else}
+						none of the nodes below — every one of them already advertises wider than {byteLen}
+						byte{byteLen > 1 ? 's' : ''}. They appear here only because something <em>sent</em> a
+						{byteLen}-byte packet through them, and that traffic comes mostly from companions, apps
+						and bots.
+						<a href="{compact ? '/m' : ''}/hash-ids#companions" class="text-signal hover:underline"
+							>How to change a sender →</a
+						>
+					{/if}
+				</span>
 			</div>
 			<div class="space-y-2.5 {compact ? '' : 'max-h-[22rem] overflow-y-auto pr-1'}">
 				{#each groups as g (g.prefix)}
@@ -305,17 +332,16 @@
 									<span class="shrink-0"><RoleBadge role={n.role} /></span>
 									{#if n.hashSize === 1 || n.hashSize === 2 || n.hashSize === 3}
 										<Tooltip
-											text="This node's own adverts use {n.hashSize}-byte IDs. It still appears at {byteLen} byte{byteLen >
-											1
-												? 's'
-												: ''} when carried in a {byteLen}-byte packet."
+											text={n.hashSize === byteLen
+												? `This node originates ${byteLen}-byte paths itself — its operator can widen it with 'set path.hash.mode'.`
+												: `This node's own adverts use ${n.hashSize}-byte IDs. It appears here only because something else sent a ${byteLen}-byte packet through it.`}
 											class="shrink-0"
 										>
 											<span
 												class="rounded-[var(--radius)] border px-1.5 py-0.5 text-[0.6rem] tracking-wide {n.hashSize ===
 												byteLen
-													? 'border-line text-fg-faint'
-													: 'border-signal/40 text-signal'}">adverts {n.hashSize}B</span
+													? 'border-amber/50 text-amber'
+													: 'border-line text-fg-faint'}">adverts {n.hashSize}B</span
 											>
 										</Tooltip>
 									{/if}
