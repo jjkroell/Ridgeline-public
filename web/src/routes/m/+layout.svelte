@@ -34,7 +34,6 @@
 		{ href: '/m/topology', label: 'Topology', icon: 'topology', desc: 'Relay backbone graph' },
 		{ href: '/m/map', label: 'Map', icon: 'map', desc: 'Node locations & coverage' },
 		{ href: '/m/identity', label: 'Identity', icon: 'keys', desc: 'Collisions & key generator' },
-		{ href: '/m/hash-ids', label: 'Hash ID Guide', icon: 'keys', desc: 'Why & how to use multi-byte IDs' },
 		{ href: '/m/observers', label: 'Observers', icon: 'observers', desc: 'Listening posts & telemetry' },
 		{ href: '/m/admin', label: 'Admin', icon: 'admin', desc: 'Injection control (restricted)' }
 	];

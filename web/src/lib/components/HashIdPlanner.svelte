@@ -291,9 +291,6 @@
 						(marked <span class="text-amber">{byteLen}B</span>) — they originate narrow paths, so
 						their operators can fix that directly with
 						<code class="text-fg-dim font-mono text-[0.7rem]">set path.hash.mode</code>.
-						<a href="{compact ? '/m' : ''}/hash-ids#repeaters" class="text-signal hover:underline"
-							>How →</a
-						>
 						The rest appear here only because something <em>else</em> sent a {byteLen}-byte packet
 						through them; that traffic comes mostly from companions, apps and bots.
 						<a href="{compact ? '/m' : ''}/hash-ids#companions" class="text-signal hover:underline"

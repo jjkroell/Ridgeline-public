@@ -4,6 +4,19 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.3] — 2026-08-13
+
+### Changed
+- **The hash-ID guide is no longer in the mobile navigation menu.** It is still
+  linked from the identity page itself, where it is relevant, and remains
+  reachable by URL — it just no longer takes a slot in the More sheet.
+
+### Fixed
+- **The collision panel had two "how to" links in one sentence.** The first
+  pointed at the repeater instructions and the second at the companion ones,
+  which read as a stutter rather than a choice. Only the sender link remains,
+  which is the one that matters: the sender chooses the path width.
+
 ## [v0.9.2] — 2026-08-13
 
 ### Changed
