@@ -10,18 +10,20 @@ import (
 func TestStaleNodeKeys(t *testing.T) {
 	cutoff := "2026-06-01T00:00:00Z"
 	nodes := []store.Node{
-		{PublicKey: "AAAA", LastSeen: "2026-05-01T00:00:00Z"}, // old advert → stale
+		{PublicKey: "AAAA", LastSeen: "2026-05-01T00:00:00Z"}, // old advert → candidate
 		{PublicKey: "BBBB", LastSeen: "2026-06-15T00:00:00Z"}, // recent advert → keep
-		{PublicKey: "CCCC", LastSeen: "2026-05-02T00:00:00Z"}, // old advert but relaying → keep
+		{PublicKey: "CCCC", LastSeen: "2026-05-02T00:00:00Z"}, // old advert → candidate too;
+		// whether CCCC is actually relaying is FilterRelayedWithin's call now, not
+		// a liveness-snapshot skip here (that snapshot credited saturated 1-byte
+		// hops and made such nodes unsweepable).
 		{PublicKey: "DDDD", LastSeen: "2026-06-01T00:00:00Z"}, // exactly at cutoff → keep
 		{PublicKey: "EEEE", LastSeen: ""},                     // never seen → skip
 	}
-	keep := map[string]LiveSignal{"CCCC": {RelayCount1h: 3}}
 
-	got := StaleNodeKeys(nodes, keep, cutoff)
+	got := StaleNodeKeys(nodes, cutoff)
 	sort.Strings(got)
-	want := []string{"AAAA"}
-	if len(got) != len(want) || got[0] != want[0] {
+	want := []string{"AAAA", "CCCC"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("StaleNodeKeys = %v, want %v", got, want)
 	}
 }
@@ -107,4 +109,30 @@ func TestFilterRelayedWithin_WidthGate(t *testing.T) {
 			t.Fatalf("an ambiguous hop must credit nobody regardless of width; got %v", got)
 		}
 	})
+}
+
+// Regression for a real field case: a repeater its owner had removed from the
+// mesh survived two sweeps because a 1-byte hop uniquely matching its prefix
+// kept crediting it. The width gate alone did not save us — the analytics liveness
+// snapshot skipped the node before the gate ran. Retention must now reach the
+// same verdict end-to-end using only width-gated evidence.
+func TestRetention_SaturatedOneByteHopNoLongerShieldsADeadNode(t *testing.T) {
+	cutoff := "2026-08-06T00:00:00Z"
+	dead := "D200E362A269" // sole owner of 1-byte prefix D2, advert-silent 34 days
+	live := "7C11223344FF"
+	nodes := []store.Node{
+		{PublicKey: dead, LastSeen: "2026-07-10T17:24:49Z"},
+		{PublicKey: live, LastSeen: "2026-07-11T00:00:00Z"},
+	}
+	// Both look "live" to the analytics snapshot; only `live` has wide evidence.
+	hops := map[string]bool{"D2": true, "7C11": true}
+
+	stale := StaleNodeKeys(nodes, cutoff)
+	if len(stale) != 2 {
+		t.Fatalf("both advert-silent nodes should be candidates, got %v", stale)
+	}
+	kept := FilterRelayedWithin(stale, nodes, hops, 2)
+	if len(kept) != 1 || kept[0] != dead {
+		t.Fatalf("the 1-byte-only node must remain stale and the 2-byte one spared; still-stale = %v", kept)
+	}
 }

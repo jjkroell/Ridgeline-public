@@ -4,6 +4,25 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.8.1] — 2026-08-13
+
+### Fixed
+- **Closed the second path that kept dead nodes alive.** v0.8.0 stopped 1-byte
+  relay hops counting as evidence, but only in one of the two gates the
+  retention sweep runs. The first gate skipped any node present in the analytics
+  liveness snapshot, and that snapshot's relay counts come from the prefix
+  resolver, which credits a hop to whichever node uniquely owns it *at any
+  width* — including one byte. A node with a unique 1-byte prefix therefore
+  still looked permanently live off other nodes' packets, and was skipped before
+  the width gate could see it. Confirmed in the field: a repeater whose owner
+  had taken it off the mesh 34 days earlier survived both sweeps this way.
+
+  Relay evidence for retention is now judged in exactly one place, with the
+  width gate, over the full retention window — which is wider than the liveness
+  window, so nothing legitimately active is lost. The clock signals carried
+  alongside relay counts are derived from adverts and so cannot testify that an
+  advert-stale node is alive either.
+
 ## [v0.8.0] — 2026-08-13
 
 ### Changed

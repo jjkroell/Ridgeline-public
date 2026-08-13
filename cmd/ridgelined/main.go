@@ -356,7 +356,7 @@ func runNodeRetention(ctx context.Context, st *store.Store, engine *analytics.En
 			return
 		}
 		cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour).UTC().Format(time.RFC3339Nano)
-		keys := analytics.StaleNodeKeys(nodes, engine.Liveness(), cutoff)
+		keys := analytics.StaleNodeKeys(nodes, cutoff)
 		if len(keys) == 0 {
 			return
 		}

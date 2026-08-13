@@ -6,23 +6,32 @@ import (
 	"github.com/jjkroell/ridgeline/internal/store"
 )
 
-// StaleNodeKeys returns the public keys of nodes that have gone silent past the
-// retention cutoff and should be pruned. A node is stale when its last advert is
-// older than cutoffISO (an RFC3339Nano UTC timestamp) AND it isn't in keep — the
-// set of nodes seen relaying within the recent liveness window.
+// StaleNodeKeys returns the public keys of nodes whose own adverts have gone
+// silent past the retention cutoff (an RFC3339Nano UTC timestamp). These are
+// only CANDIDATES: FilterRelayedWithin then decides which of them are still
+// demonstrably relaying and must be kept.
 //
 // last_seen on a node row tracks only its own adverts, and a healthy MeshCore
 // node re-adverts every few hours, so an advert silence measured in weeks is a
-// reliable "gone" signal. keep guards the rare node whose advert is stale but
-// which is still forwarding traffic (so still part of the mesh) from being cut.
-func StaleNodeKeys(nodes []store.Node, keep map[string]LiveSignal, cutoffISO string) []string {
+// reliable "gone" signal.
+//
+// This deliberately does NOT consult the analytics liveness snapshot any more.
+// That snapshot's relay counts come from the prefix resolver, which credits a
+// hop to whichever node uniquely owns that prefix AT ANY WIDTH — including one
+// byte, where the space is ~97% saturated by real traffic. A node with a unique
+// 1-byte prefix therefore looked permanently "live" off other nodes' packets and
+// was skipped here before FilterRelayedWithin's width gate could ever see it.
+// Confirmed in the field: a repeater its owner had taken off the mesh 34 days
+// earlier survived two sweeps that way. Relay evidence is now judged in exactly
+// one place, with the width gate, over the full retention window (which is wider
+// than the liveness window, so nothing legitimate is lost). The clock signals
+// carried alongside it are derived from adverts, so they cannot testify that an
+// advert-stale node is alive either.
+func StaleNodeKeys(nodes []store.Node, cutoffISO string) []string {
 	var stale []string
 	for _, n := range nodes {
 		if n.LastSeen == "" || n.LastSeen >= cutoffISO {
 			continue // never seen (shouldn't happen) or adverted recently enough
-		}
-		if _, alive := keep[n.PublicKey]; alive {
-			continue // stale advert, but still relaying — keep it
 		}
 		stale = append(stale, n.PublicKey)
 	}
@@ -30,8 +39,9 @@ func StaleNodeKeys(nodes []store.Node, keep map[string]LiveSignal, cutoffISO str
 }
 
 // FilterRelayedWithin removes from stale any node that relayed traffic within the
-// retention window, extending the liveness guard in StaleNodeKeys (which only
-// reaches the short analytics window) to the whole window. relayHops is the set
+// retention window. This is the ONLY place relay evidence is judged for
+// retention — see StaleNodeKeys for why the analytics liveness snapshot is not
+// consulted. relayHops is the set
 // of relay-hop identifiers seen in packet paths across the window (see
 // store.RelayHopPrefixesSince); allNodes is every known node, needed to resolve
 // those hops to nodes.
