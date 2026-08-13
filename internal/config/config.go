@@ -33,6 +33,14 @@ type Config struct {
 	// kept. A removed node reappears the moment it transmits again, so this only
 	// clears the genuinely-departed. Defaults to 7; set 0 to disable.
 	NodeRetentionDays int `json:"nodeRetentionDays"`
+	// NodeRetentionMinHopBytes is the narrowest relay hop that counts as evidence
+	// a node is still alive. Hops are recorded at the width the SENDER chose, and
+	// the 1-byte space is ~97% saturated within a week of real traffic — so a
+	// 1-byte hop matching a node is background noise from whoever actually
+	// relayed, not attribution. Crediting it makes any node with a unique 1-byte
+	// prefix immortal. 2-byte is ~99.3% unsaturated and is real evidence.
+	// Defaults to 2; set 1 to restore the old (permissive) behaviour.
+	NodeRetentionMinHopBytes int `json:"nodeRetentionMinHopBytes"`
 	// ObserverRetentionMinutes is how long an observer may go without reporting
 	// (no packet or status) before the retention sweep removes its row. Only the
 	// observers row is deleted — the packets it reported are kept — and it
@@ -88,6 +96,7 @@ func Default() Config {
 		WebDir:                   "web/build",
 		ScrubArtifacts:           true,
 		NodeRetentionDays:        7,
+		NodeRetentionMinHopBytes: 2,
 		ObserverRetentionMinutes: 60,
 		Email: Email{
 			Port:     587,

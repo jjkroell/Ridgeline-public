@@ -36,14 +36,18 @@ func StaleNodeKeys(nodes []store.Node, keep map[string]LiveSignal, cutoffISO str
 // store.RelayHopPrefixesSince); allNodes is every known node, needed to resolve
 // those hops to nodes.
 //
-// Resolution is UNIQUE-match, mirroring the analytics relay resolver: a hop
-// credits a node only when exactly one known node's public key carries that hash
-// prefix. Generous prefix matching would be useless here — 1-byte hops share a
+// Two gates apply. First WIDTH: a hop narrower than minHopBytes is discarded
+// outright — see NodeRetentionMinHopBytes. Then UNIQUE-match, mirroring the
+// analytics relay resolver: a hop credits a node only when exactly one known
+// node's public key carries that hash prefix. Generous prefix matching would be useless here — 1-byte hops share a
 // 256-value space that saturates under real traffic, so almost every node would
 // match some hop and nothing could ever be pruned. Requiring a unique owner means
 // an ambiguous short hop credits no one (correct: it isn't evidence THIS node
 // relayed), while a node with a distinctive multi-byte presence is reliably kept.
-func FilterRelayedWithin(stale []string, allNodes []store.Node, relayHops map[string]bool) []string {
+func FilterRelayedWithin(stale []string, allNodes []store.Node, relayHops map[string]bool, minHopBytes int) []string {
+	if minHopBytes < 1 {
+		minHopBytes = 1
+	}
 	if len(relayHops) == 0 || len(stale) == 0 {
 		return stale
 	}
@@ -53,6 +57,13 @@ func FilterRelayedWithin(stale []string, allNodes []store.Node, relayHops map[st
 	}
 	relayed := make(map[string]bool)
 	for hop := range relayHops {
+		// Width gate. A hop narrower than minHopBytes is not attribution: the
+		// 1-byte space saturates under real traffic (measured at ~97% of all 256
+		// values inside a week), so such a hop matches SOME node almost by
+		// definition and says nothing about which one relayed.
+		if len(hop)/2 < minHopBytes {
+			continue
+		}
 		owner, count := "", 0
 		for _, pk := range pubkeys {
 			if strings.HasPrefix(pk, hop) {

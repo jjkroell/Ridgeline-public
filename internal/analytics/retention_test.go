@@ -46,7 +46,7 @@ func TestFilterRelayedWithin(t *testing.T) {
 	// "CC" is ambiguous (two owners) → credits no one; "AB" and "BB11" are unique.
 	relayHops := map[string]bool{"AB": true, "BB11": true, "CC": true}
 
-	got := FilterRelayedWithin(stale, allNodes, relayHops)
+	got := FilterRelayedWithin(stale, allNodes, relayHops, 1)
 	sort.Strings(got)
 	want := []string{"CC11223344556677", "DD11223344556677"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
@@ -54,7 +54,57 @@ func TestFilterRelayedWithin(t *testing.T) {
 	}
 
 	// No hop data → nothing filtered (fail-safe: keep the advert-based decision).
-	if got := FilterRelayedWithin(stale, allNodes, nil); len(got) != len(stale) {
+	if got := FilterRelayedWithin(stale, allNodes, nil, 1); len(got) != len(stale) {
 		t.Fatalf("empty relayHops should pass stale through unchanged, got %v", got)
 	}
+}
+
+// The saturation case: a 1-byte hop matches SOME node almost by definition
+// (~97% of the 256-value space is observed within a week of real traffic), so
+// crediting it made any node with a unique 1-byte prefix immortal. At the
+// default minHopBytes=2 a narrow hop is no longer evidence.
+func TestFilterRelayedWithin_WidthGate(t *testing.T) {
+	dead := "D2AAAAAAAAAA" // unique 1-byte prefix D2, long silent
+	live := "7C11223344FF"
+	all := []store.Node{{PublicKey: dead}, {PublicKey: live}}
+	stale := []string{dead, live}
+
+	t.Run("1-byte hop no longer credits at the default", func(t *testing.T) {
+		got := FilterRelayedWithin(stale, all, map[string]bool{"D2": true}, 2)
+		if len(got) != 2 {
+			t.Fatalf("a 1-byte hop must not count as evidence; still-stale = %v, want both", got)
+		}
+	})
+
+	t.Run("2-byte hop still credits", func(t *testing.T) {
+		got := FilterRelayedWithin(stale, all, map[string]bool{"7C11": true}, 2)
+		if len(got) != 1 || got[0] != dead {
+			t.Fatalf("2-byte evidence should keep the live node; still-stale = %v, want [%s]", got, dead)
+		}
+	})
+
+	t.Run("3-byte hop still credits", func(t *testing.T) {
+		got := FilterRelayedWithin(stale, all, map[string]bool{"D2AAAA": true}, 2)
+		if len(got) != 1 || got[0] != live {
+			t.Fatalf("3-byte evidence should keep that node; still-stale = %v", got)
+		}
+	})
+
+	t.Run("minHopBytes=1 restores the permissive behaviour", func(t *testing.T) {
+		got := FilterRelayedWithin(stale, all, map[string]bool{"D2": true}, 1)
+		if len(got) != 1 || got[0] != live {
+			t.Fatalf("with the gate at 1 the narrow hop should credit again; got %v", got)
+		}
+	})
+
+	t.Run("ambiguity still wins over width", func(t *testing.T) {
+		// Two nodes share 3 bytes: even a wide hop credits nobody.
+		a := "AB12345600"
+		b := "AB12345611"
+		got := FilterRelayedWithin([]string{a, b}, []store.Node{{PublicKey: a}, {PublicKey: b}},
+			map[string]bool{"AB1234": true}, 2)
+		if len(got) != 2 {
+			t.Fatalf("an ambiguous hop must credit nobody regardless of width; got %v", got)
+		}
+	})
 }

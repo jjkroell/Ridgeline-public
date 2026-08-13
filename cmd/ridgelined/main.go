@@ -135,7 +135,7 @@ func run(log *slog.Logger, configPath string) error {
 	go runSessionPrune(ctx, st, log)
 	go runClaimPrune(ctx, st, log)
 	if cfg.NodeRetentionDays > 0 {
-		go runNodeRetention(ctx, st, engine, cfg.NodeRetentionDays, log)
+		go runNodeRetention(ctx, st, engine, cfg.NodeRetentionDays, cfg.NodeRetentionMinHopBytes, log)
 	}
 	if cfg.ObserverRetentionMinutes > 0 {
 		go runObserverRetention(ctx, st, cfg.ObserverRetentionMinutes, log)
@@ -348,7 +348,7 @@ func runRetention(ctx context.Context, st *store.Store, log *slog.Logger) {
 // A pruned node's row and stored adverts go; it reappears the moment it
 // transmits again, so this only clears genuinely-departed nodes. Like the
 // artifact sweep it waits for ingest/analytics to settle, then runs daily.
-func runNodeRetention(ctx context.Context, st *store.Store, engine *analytics.Engine, retentionDays int, log *slog.Logger) {
+func runNodeRetention(ctx context.Context, st *store.Store, engine *analytics.Engine, retentionDays, minHopBytes int, log *slog.Logger) {
 	prune := func() {
 		nodes, err := st.ListNodes()
 		if err != nil {
@@ -368,7 +368,7 @@ func runNodeRetention(ctx context.Context, st *store.Store, engine *analytics.En
 			log.Warn("node retention: relay scan", "err", err)
 			return
 		}
-		keys = analytics.FilterRelayedWithin(keys, nodes, relayHops)
+		keys = analytics.FilterRelayedWithin(keys, nodes, relayHops, minHopBytes)
 		if len(keys) == 0 {
 			return
 		}
@@ -378,7 +378,7 @@ func runNodeRetention(ctx context.Context, st *store.Store, engine *analytics.En
 			return
 		}
 		log.Info("node retention: removed silent nodes",
-			"thresholdDays", retentionDays, "candidates", len(keys),
+			"thresholdDays", retentionDays, "minHopBytes", minHopBytes, "candidates", len(keys),
 			"nodesDeleted", res.Nodes, "observationsDeleted", res.Observations)
 	}
 
