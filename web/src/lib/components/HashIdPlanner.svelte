@@ -425,8 +425,15 @@
 		</div>
 	{/if}
 
+{#if !compact}
 	<!-- Pick an unused hash ID + Generate key pair — side by side on desktop -->
-	<div class="grid items-stretch gap-4 {compact ? '' : 'md:grid-cols-2'}">
+	<!-- [&>*]:min-w-0 is load-bearing. Grid items default to min-width:auto, so a
+	     child with a wide min-content (the key rows, the status line) pushes the
+	     column past the viewport instead of shrinking. On /m that overflow is not
+	     visible in document.scrollWidth — the shell is `fixed inset-0
+	     overflow-hidden` and it is <main> that scrolls — so it shows up as the
+	     page sliding left/right rather than as a document-level scrollbar. -->
+	<div class="grid items-stretch gap-4 [&>*]:min-w-0 {compact ? '' : 'md:grid-cols-2'}">
 	<!-- Pick an unused hash ID -->
 	<div class="panel rise px-5 py-4" style="animation-delay:80ms">
 		<div class="label mb-3">Pick an unused hash ID</div>
@@ -473,13 +480,13 @@
 			<!-- Result -->
 			<div class="space-y-3">
 				<div
-					class="border-signal/30 bg-signal/5 flex items-center gap-2 rounded-[var(--radius)] border px-3 py-2"
+					class="border-signal/30 bg-signal/5 flex flex-wrap items-center gap-2 rounded-[var(--radius)] border px-3 py-2"
 				>
-					<span class="live-dot"></span>
-					<span class="text-signal text-sm font-medium"
+					<span class="live-dot shrink-0"></span>
+					<span class="text-signal min-w-0 text-sm font-medium"
 						>Found a key with hash ID <span class="font-mono font-700">{result.publicKey.slice(0, want)}</span></span
 					>
-					<span class="text-fg-faint ml-auto font-mono text-xs tnum"
+					<span class="text-fg-faint ml-auto shrink-0 font-mono text-xs tnum"
 						>{fmtInt(keygen.attempts)} tries · {(keygen.elapsedMs / 1000).toFixed(1)}s</span
 					>
 				</div>
@@ -584,4 +591,24 @@
 		{/if}
 	</div>
 	</div>
+{:else}
+	<!-- Picking an ID and generating a vanity key pair are desktop-only.
+	     A 3-byte vanity search is a brute-force loop over millions of keypairs —
+	     minutes of sustained CPU, which on a phone means heat and battery for a
+	     task you only do once. The panels also need the width. The collision
+	     analysis above is the part that is genuinely useful on a phone, so that
+	     stays. -->
+	<div class="panel rise px-5 py-4" style="animation-delay:80ms">
+		<div class="label mb-2">Picking an ID &amp; generating a key</div>
+		<p class="text-fg-dim text-sm leading-relaxed">
+			These are desktop-only. Searching for a key with a chosen hash ID is a
+			brute-force loop — at 3 bytes it can run for minutes of solid CPU, which is a
+			poor trade on a phone for something you do once per node.
+		</p>
+		<p class="text-fg-faint mt-2 text-xs leading-relaxed">
+			Open Ridgeline on a desktop browser and go to <span class="text-fg-dim">Identity</span>.
+			The collision list above works the same on either.
+		</p>
+	</div>
+{/if}
 </div>
