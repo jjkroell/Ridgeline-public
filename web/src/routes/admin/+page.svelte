@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
 	import { confirmer } from '$lib/confirm.svelte';
@@ -314,6 +315,8 @@
 	);
 	const purgedEntries = $derived(blocks.filter((b) => b.reason === 'purged'));
 </script>
+
+<Seo title="Admin" description="Restricted administration console for this Ridgeline instance." path="/admin" />
 
 <PageHeader eyebrow="Restricted" title="Admin — Site Control" />
 

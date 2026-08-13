@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { api, type MeshAnalytics } from '$lib/api';
 	import { fmtNum, shortKey, roleColor } from '$lib/format';
@@ -51,6 +52,8 @@
 	const maxPay = $derived(Math.max(1, ...(data?.payloadTypes ?? []).map((p) => p.count)));
 	const maxRelay = $derived(Math.max(1, ...(data?.topRelays ?? []).map((r) => r.relayed)));
 </script>
+
+<Seo title="Analytics" description="Mesh-wide health and traffic analytics." path="/m/analytics" />
 
 <div class="px-4 py-4">
 	<!-- window -->

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { api, type MeshAnalytics } from '$lib/api';
 	import TopologyGraph from '$lib/components/TopologyGraph.svelte';
@@ -35,6 +36,8 @@
 	const topo = $derived(data?.topology);
 	const hasTopo = $derived(!!topo && topo.nodes.length > 0 && topo.edges.length > 0);
 </script>
+
+<Seo title="Topology" description="Relay backbone graph." path="/m/topology" />
 
 <div class="flex h-full flex-col">
 	<!-- window + counts -->

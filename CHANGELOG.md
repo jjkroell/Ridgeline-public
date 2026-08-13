@@ -4,6 +4,79 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.7.3] — 2026-08-12
+
+### Changed
+- **Hash-ID planner presents width ambiguity as conditional, not as a node
+  defect.** v0.7.2 corrected the maths — a relay stamps its prefix at the width
+  the *sender* chose, so any routing node can be ambiguous inside a narrow path
+  — but kept calling the result a "collision". Listing a node that advertises
+  at 3 bytes under that heading reads as an accusation that its configuration
+  is broken, when its own adverts are perfectly unambiguous. The panel is now
+  "Ambiguous in an N-byte path", each node carries a badge showing the width
+  its own adverts use, and a note names who can actually fix it: the senders
+  still emitting narrow paths, not the nodes listed.
+- **The planner now measures rather than warns.** It shows the share of traffic
+  observed at the selected width over the last 24 hours, so a reader can tell a
+  live problem from a theoretical one. Below 1% it says so explicitly.
+
+## [v0.7.2] — 2026-08-12
+
+Three issues raised on the public repo, all confirmed and fixed.
+
+### Fixed
+- **One metadata set per route.** Prerendered pages emitted six duplicated tags
+  — `title`, `description`, `og:title`, `og:description`, `twitter:title`,
+  `twitter:description` — with the generic shell value first, so link previews
+  in Discord, iMessage and similar could show a generic card instead of the
+  page being shared. The generic block now sits after `%sveltekit.head%`, and a
+  postbuild step strips it from prerendered HTML entirely, leaving one
+  authoritative set. The SPA fallback shell keeps the generic card. Fifteen
+  routes that had no metadata at all gained it, including per-node and
+  per-observer titles on the detail pages — the case that matters most when
+  someone shares a link to a specific node.
+- **Narrow-screen header no longer overflows the page.** The mobile header
+  rendered all eleven navigation items in one non-wrapping row, making the
+  document far wider than the viewport at every size below the desktop
+  breakpoint and letting the whole page pan sideways. It is now a menu button
+  and panel, with a 44px tap target; collapsed links are absent from the DOM so
+  keyboard focus cannot land off-screen. Verified from 320px to 1024px.
+- **Hash-ID guide corrected against MeshCore's own documentation.** The page
+  shipped in v0.7.1 without a compatibility warning: repeaters older than
+  firmware 1.14 silently drop 2- and 3-byte packets, so recommending two bytes
+  unconditionally was advice that could black-hole traffic. The recommendation
+  is now conditional on firmware and regional coordination. The planner warning
+  was also backwards — prefixes nest, so a prefix unique at one byte is
+  necessarily unique at two and three, and the risk runs from longer prefixes
+  to shorter packet widths. Collision consequences are no longer overstated:
+  MeshCore's FAQ says packets continue to pass and duplicates mainly cost path
+  analysis, so the page now separates the certain analysis cost from the
+  possible forwarding effect. Address-space figures corrected to 254 / 65,024 /
+  16,646,144, since `00`/`FF` are reserved on the first byte only.
+- **Planner measured the wrong population.** Collision analysis compared only
+  nodes whose own advert width matched the selected width, but a relay writes
+  its prefix at the width the *sender* chose. On a mesh where most repeaters
+  advertise at three bytes this understated one-byte exposure by a factor of
+  48. It now compares every path-participating node at the selected packet
+  width.
+
+## [v0.7.1] — 2026-08-09
+
+### Added
+- **Multi-byte hash ID guide (`/hash-ids`).** A linkable explainer for why a
+  mesh benefits from moving off 1-byte path IDs, and how to change a repeater,
+  room server or companion. Built as a prerendered route rather than a modal so
+  individual answers can be shared directly — `#why`, `#repeaters`,
+  `#companions` — and so it is indexable and readable without JavaScript. The
+  collision odds are computed from the birthday problem over the 254 usable
+  1-byte IDs (`00`/`FF` reserved): a coin flip at 20 routing nodes and
+  effectively certain at 50. The cost is stated too — every hop carries that
+  many bytes — so two bytes is the usual compromise rather than three by
+  default. The point the guide leads with is the one operators most often miss:
+  the path width is chosen by whoever *originates* a packet, not by the
+  repeaters carrying it, so a companion's setting governs the whole route even
+  though a companion never appears in a path and cannot itself collide.
+
 ## [v0.7.0] — 2026-08-06
 
 ### Added

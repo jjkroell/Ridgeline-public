@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Node } from '$lib/api';
 	import { ago, shortKey, nodeStatus, roleColor, roleLabel, lastHeard } from '$lib/format';
@@ -27,6 +28,8 @@
 	// Filtering + ordering live in NodeFilters so /nodes and /m/nodes agree.
 	const filtered = $derived(filters.apply(nodes));
 </script>
+
+<Seo title="Nodes" description="Every node heard on the mesh." path="/m/nodes" />
 
 <div class="px-4 py-4">
 	<!-- Controls: quiet by design — search plus one control that names the active filters. -->

@@ -36,14 +36,21 @@ export function isPathNode(n: Pick<Node, 'role'>): boolean {
 	return n.role !== 'ChatNode';
 }
 
-// A node only collides with other nodes that share its *configured* hash-ID
-// length: a node set to 3-byte IDs is identified by 3 bytes and can't be confused
-// with a 1-byte node, and vice-versa. So all collision analysis is scoped to the
-// cohort of nodes with the same `hashSize`. (hashSize 0 = the node hasn't
-// advertised its length yet, so we can't place it in a cohort.)
-function inCohort(n: Node, byteLen: HashByteLen): boolean {
-	return n.hashSize === byteLen;
-}
+// Collision analysis is scoped by PACKET width, not by each node's own setting.
+//
+// A relay writes its prefix at the width the packet already carries — the
+// originator stamps that width into the header and every hop appends at it
+// (MeshCore: Mesh::sendFlood -> setPathHashSizeAndCount, then
+// routeRecvPacket -> copyHashTo(..., getPathHashSize())). A repeater does not
+// get to use its own advert width when forwarding someone else's packet.
+//
+// So when a sender emits a 1-byte path, EVERY path-participating node in that
+// route is identified by 1 byte, whatever its own hashSize says. Filtering to
+// nodes whose advert matches the selected width badly understates the risk: on
+// a ~200-node mesh where most repeaters advertise at 3 bytes, it reported a
+// single colliding group at 1 byte where the real exposure was 48. `hashSize`
+// is still worth showing (it says what each node advertises with), but it must
+// not gate the collision maths.
 
 /** How many path-participating nodes are configured at each hash-ID length. */
 export function cohortCounts(nodes: Node[]): { 1: number; 2: number; 3: number; unknown: number } {
@@ -56,22 +63,22 @@ export function cohortCounts(nodes: Node[]): { 1: number; 2: number; 3: number; 
 	return c;
 }
 
-/** Every prefix occupied by a path node *configured at this length*. */
+/** Every prefix occupied by a path node when traffic runs at this width. */
 export function usedPrefixes(nodes: Node[], byteLen: HashByteLen): Set<string> {
 	const set = new Set<string>();
 	for (const n of nodes) {
-		if (!isPathNode(n) || !inCohort(n, byteLen)) continue;
+		if (!isPathNode(n)) continue;
 		const p = nodePrefix(n, byteLen);
 		if (p.length === byteLen * 2) set.add(p);
 	}
 	return set;
 }
 
-/** Groups of two-or-more same-length path nodes that share their hash-ID prefix. */
+/** Groups of two-or-more path nodes indistinguishable in a path at this width. */
 export function collisionGroups(nodes: Node[], byteLen: HashByteLen): CollisionGroup[] {
 	const buckets = new Map<string, Node[]>();
 	for (const n of nodes) {
-		if (!isPathNode(n) || !inCohort(n, byteLen)) continue;
+		if (!isPathNode(n)) continue;
 		const p = nodePrefix(n, byteLen);
 		if (p.length !== byteLen * 2) continue;
 		const arr = buckets.get(p);
@@ -322,10 +329,9 @@ export function nodeCollisionInfo(
 		return { genuinePeers: [], artifactOf: null };
 	const byteLen = hs as HashByteLen;
 	const prefix = nodePrefix(node, byteLen);
-	// Only path nodes configured at the same length can collide with this one.
-	const members = nodes.filter(
-		(n) => isPathNode(n) && inCohort(n, byteLen) && nodePrefix(n, byteLen) === prefix
-	);
+	// Any path node sharing this prefix is indistinguishable from it in a path at
+	// this width — its own advert width is irrelevant, since the packet decides.
+	const members = nodes.filter((n) => isPathNode(n) && nodePrefix(n, byteLen) === prefix);
 	if (members.length < 2) return { genuinePeers: [], artifactOf: null };
 
 	const { real, artifacts } = classifyGroup(members, byteLen);

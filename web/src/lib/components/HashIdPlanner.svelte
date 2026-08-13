@@ -28,12 +28,36 @@
 	// pill) preselects the cohort and highlights that hash ID's collision group.
 	let highlightPrefix = $state('');
 
+	// How much live traffic actually travels at each width. A width's ambiguity
+	// only matters in proportion to the traffic using it, so show the measurement
+	// rather than leaving the reader to assume it is hypothetical.
+	type WidthMix = { 1: number; 2: number; 3: number; total: number };
+	let widthMix = $state<WidthMix | null>(null);
+	const observedShare = $derived(
+		widthMix && widthMix.total ? (100 * widthMix[byteLen]) / widthMix.total : null
+	);
+
 	onMount(async () => {
 		const len = parseInt(page.url.searchParams.get('len') ?? '', 10);
 		if (len === 1 || len === 2 || len === 3) byteLen = len;
 		highlightPrefix = (page.url.searchParams.get('id') ?? '').toUpperCase();
 		try {
 			nodes = await api.nodes();
+			// Best-effort: the planner is still useful without it.
+			try {
+				const evts = await api.recent(24 * 3600);
+				const mix: WidthMix = { 1: 0, 2: 0, 3: 0, total: 0 };
+				for (const e of evts) {
+					const h = e.hashSize;
+					if (h === 1 || h === 2 || h === 3) {
+						mix[h]++;
+						mix.total++;
+					}
+				}
+				if (mix.total > 0) widthMix = mix;
+			} catch {
+				/* leave widthMix null; the share line just doesn't render */
+			}
 		} catch {
 			/* keep empty; collisions just show nothing */
 		} finally {
@@ -52,9 +76,14 @@
 	const groups = $derived(analysis.genuine);
 	const artifacts = $derived(analysis.artifacts);
 	const used = $derived(usedPrefixes(nodes, byteLen));
-	const space = $derived(1 << (8 * byteLen)); // 256 / 65536 / 16,777,216
+	// Usable, not raw: MeshCore rejects keys whose FIRST byte is 00 or FF
+	// (Identity.cpp), so each extra byte multiplies 254, not 256.
+	// 254 / 65,024 / 16,646,144 — same convention as the /hash-ids guide.
+	const space = $derived(254 * 256 ** (byteLen - 1));
 	const status = $derived(prefixStatus(nodes, byteLen, prefix));
 	const want = $derived(byteLen * 2);
+	// Every path-participating node is exposed at whatever width the sender picks.
+	const pathNodeCount = $derived(nodes.filter(isPathNode).length);
 
 	// Same-length path nodes occupying the typed prefix (shown when it's in use).
 	const occupants = $derived(
@@ -167,7 +196,14 @@
 <div class="space-y-4 {compact ? 'px-4 py-4' : 'px-6 py-6 md:px-10'}">
 	<!-- Length selector (= which ID-length cohort) -->
 	<div class="panel rise px-5 py-4">
-		<div class="label mb-3">Hash ID length</div>
+		<div class="mb-3 flex items-center justify-between gap-3">
+			<div class="label">Hash ID length</div>
+			<a
+				href="{compact ? '/m' : ''}/hash-ids"
+				class="text-fg-faint hover:text-signal shrink-0 text-xs transition-colors"
+				>How to change this →</a
+			>
+		</div>
 		<div class="flex gap-2">
 			{#each [1, 2, 3] as const as l (l)}
 				<button
@@ -185,16 +221,19 @@
 			{/each}
 		</div>
 		<div class="text-fg-faint mt-3 text-xs leading-relaxed">
-			Each node is configured for a {byteLen}-byte ID (the first {byteLen}
-			byte{byteLen > 1 ? 's' : ''} of its key) and can only collide with other {byteLen}-byte nodes.
+			This is the width of the <em>packet</em>, not a per-node setting. A relay writes its prefix at
+			whatever width the sender chose, so at {byteLen} byte{byteLen > 1 ? 's' : ''}
+			<span class="text-fg-dim">every</span> routing node is identified by its first {byteLen}
+			byte{byteLen > 1 ? 's' : ''} — whatever its own adverts use.
 			{#if !loading}
 				<span class="text-fg-dim tnum">{used.size.toLocaleString()} of {space.toLocaleString()}</span
 				>
-				IDs are taken by the {cohorts[byteLen].toLocaleString()}
-				routing node{cohorts[byteLen] === 1 ? '' : 's'} at this length.{#if cohorts.unknown}
-					<span class="text-fg-dim"
-						>{cohorts.unknown} node{cohorts.unknown === 1 ? '' : 's'} haven't advertised a length yet.</span
-					>{/if}
+				IDs are taken across all {pathNodeCount.toLocaleString()}
+				routing node{pathNodeCount === 1 ? '' : 's'}.
+				<span class="text-fg-dim"
+					>Adverts today: {cohorts[1]} at 1 byte, {cohorts[2]} at 2, {cohorts[3]} at 3{#if cohorts.unknown}, {cohorts.unknown}
+						not yet advertised{/if}.</span
+				>
 				Companions are excluded — they don't repeat packets, so they never appear in a path.
 			{/if}
 		</div>
@@ -203,22 +242,47 @@
 	<!-- Genuine collisions -->
 	<div class="panel rise px-5 py-4" style="animation-delay:40ms">
 		<div class="mb-1 flex items-center justify-between gap-3">
-			<div class="label">Collisions among {byteLen}-byte nodes</div>
+			<div class="label">Ambiguous in a {byteLen}-byte path</div>
 			<span class="text-fg-faint font-mono text-xs tnum">
 				{groups.length} group{groups.length === 1 ? '' : 's'}
 			</span>
 		</div>
 		<div class="text-fg-faint mb-3 text-xs">
-			Only nodes configured at {byteLen} byte{byteLen > 1 ? 's' : ''} are compared, and records with
-			corrupted keys are filtered out below.
+			These nodes are indistinguishable <em>from each other in the path of a {byteLen}-byte
+			packet</em> — they are not misconfigured, and their own adverts may well be unambiguous. Any
+			routing node can appear in a {byteLen}-byte path, because a relay writes its prefix at the
+			width the <span class="text-fg-dim">sender</span> chose, not its own.
+			{#if observedShare !== null}
+				<span class="text-fg-dim"
+					>Over the last 24h, <span class="tnum">{observedShare.toFixed(1)}%</span> of observed
+					traffic used this width{observedShare < 1
+						? ' — so this is largely theoretical today'
+						: ''}.</span
+				>
+			{/if}
+			Records with corrupted keys are filtered out below.
 		</div>
 		{#if loading}
 			<div class="text-fg-faint py-4 text-sm">Loading nodes…</div>
 		{:else if groups.length === 0}
 			<div class="text-fg-dim py-2 text-sm">
-				No two {byteLen}-byte nodes share an ID — every {byteLen}-byte hash ID in the mesh is unique.
+				No two routing nodes share a prefix at {byteLen} byte{byteLen > 1 ? 's' : ''} — every hop in
+				a {byteLen}-byte path is attributable to exactly one node.
 			</div>
 		{:else}
+			<div
+				class="border-signal/40 bg-signal/5 mb-3 rounded-[var(--radius)] border px-3 py-2.5 text-xs"
+			>
+				<span class="text-signal">Who fixes this:</span>
+				<span class="text-fg-dim"
+					>not the nodes listed below. They appear at {byteLen} byte{byteLen > 1 ? 's' : ''} because
+					something <em>sent</em> a {byteLen}-byte packet through them. The ambiguity goes away when
+					the senders — companions, apps and bots — move to a wider path.
+					<a href="{compact ? '/m' : ''}/hash-ids#companions" class="text-signal hover:underline"
+						>How to change a sender →</a
+					></span
+				>
+			</div>
 			<div class="space-y-2.5 {compact ? '' : 'max-h-[22rem] overflow-y-auto pr-1'}">
 				{#each groups as g (g.prefix)}
 					{@const isTarget = !!highlightPrefix && g.prefix === highlightPrefix}
@@ -239,6 +303,22 @@
 								<li class="flex items-center gap-2 text-sm">
 									<span class="text-fg min-w-0 truncate">{n.name || '(unnamed)'}</span>
 									<span class="shrink-0"><RoleBadge role={n.role} /></span>
+									{#if n.hashSize === 1 || n.hashSize === 2 || n.hashSize === 3}
+										<Tooltip
+											text="This node's own adverts use {n.hashSize}-byte IDs. It still appears at {byteLen} byte{byteLen >
+											1
+												? 's'
+												: ''} when carried in a {byteLen}-byte packet."
+											class="shrink-0"
+										>
+											<span
+												class="rounded-[var(--radius)] border px-1.5 py-0.5 text-[0.6rem] tracking-wide {n.hashSize ===
+												byteLen
+													? 'border-line text-fg-faint'
+													: 'border-signal/40 text-signal'}">adverts {n.hashSize}B</span
+											>
+										</Tooltip>
+									{/if}
 									{#if !n.hasLocation}
 										<Tooltip text="No GPS location broadcast" class="shrink-0">
 											<span

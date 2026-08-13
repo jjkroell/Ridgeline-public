@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
@@ -245,6 +246,8 @@
 		return () => { clearInterval(t); cancelAnimationFrame(raf); map?.remove(); map = null; };
 	});
 </script>
+
+<Seo title="Live Map" description="Packets on the map as they arrive." path="/m/live-map" />
 
 <div class="relative h-full w-full">
 	{#if !webglOk}

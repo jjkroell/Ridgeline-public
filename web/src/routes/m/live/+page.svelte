@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { live, groupLive, type LiveGroup } from '$lib/live.svelte';
 	import { shortKey, fmtSnr, snrColor, roleColor } from '$lib/format';
 	import { timeMode } from '$lib/time-mode.svelte';
@@ -23,6 +24,8 @@
 		paused = !paused;
 	}
 </script>
+
+<Seo title="Feed" description="Live packet feed from the MeshCore mesh." path="/m/live" />
 
 <div class="px-4 py-4">
 	<div class="mb-3 flex items-center gap-2">

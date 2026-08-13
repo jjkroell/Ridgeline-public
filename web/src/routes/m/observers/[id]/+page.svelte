@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type Observer, type ObserverAnalytics, type ObserverTelemetry, type ObserverStatus } from '$lib/api';
@@ -80,6 +81,8 @@
 	const maxAct = $derived(Math.max(1, ...(data?.activity ?? [])));
 	const maxPay = $derived(Math.max(1, ...(data?.payloadTypes ?? []).map((p) => p.count)));
 </script>
+
+<Seo title={observer?.name || 'Observer'} description={`Telemetry and reception statistics for the ${observer?.name || 'observer'} listening post.`} path={`/m/observers/${id}`} />
 
 <div class="px-4 py-4">
 	{#if loading && !observer}

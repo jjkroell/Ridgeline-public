@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import maplibregl from 'maplibre-gl';
@@ -151,6 +152,8 @@
 	});
 	onMount(() => () => { map?.remove(); map = null; });
 </script>
+
+<Seo title={node?.name || shortKey(pubkey, 8, 4)} description={`Node detail for ${node?.name || shortKey(pubkey, 8, 4)} on the MeshCore mesh: adverts heard, relay activity, observers and coverage.`} path={`/m/nodes/${pubkey}`} />
 
 <div class="px-4 py-4">
 	{#if !loaded}

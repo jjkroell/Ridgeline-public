@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
 	import { confirmer } from '$lib/confirm.svelte';
@@ -127,6 +128,8 @@
 	const kindColor: Record<string, string> = { bridge: 'var(--color-coral)', observer: 'var(--color-amber)', node: 'var(--color-fg-dim)', allow: 'var(--color-signal)' };
 	const kindLabel = (k: string) => (k === 'allow' ? 'dismissed' : k);
 </script>
+
+<Seo title="Admin" description="Restricted administration console for this Ridgeline instance." path="/m/admin" />
 
 <div class="px-4 py-4">
 	{#if !auth.ready}

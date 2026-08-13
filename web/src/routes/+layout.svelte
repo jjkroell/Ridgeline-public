@@ -78,6 +78,17 @@
 	// but keep the shared init above (theme, channels, favorites, live store).
 	const isMobileApp = $derived(page.url.pathname === '/m' || page.url.pathname.startsWith('/m/'));
 
+	// Narrow-screen nav. The header used to render every nav item in one
+	// non-wrapping row, which made the document wider than the viewport at any
+	// size below the md: breakpoint and let the whole page pan sideways. A
+	// disclosure keeps every destination reachable without widening the document.
+	let navOpen = $state(false);
+	// Close on navigation, otherwise the panel stays open over the new page.
+	$effect(() => {
+		page.url.pathname;
+		navOpen = false;
+	});
+
 	const icons: Record<string, string> = {
 		grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
 		node: 'M12 2v6m0 8v6M2 12h6m8 0h6M12 8a4 4 0 100 8 4 4 0 000-8z',
@@ -240,18 +251,40 @@
 		<!-- Non-production banner (self-guards; only on a dev/staging instance). -->
 		<DevBanner />
 		<!-- Mobile top bar -->
-		<header
-			class="border-line bg-ink-2/80 flex items-center gap-4 border-b px-4 py-3 backdrop-blur-sm md:hidden"
-		>
-			<a href="/" class="font-display font-900 tracking-tight">{SITE_NAME.toUpperCase()}</a>
-			<nav class="ml-auto flex gap-3 text-xs">
-				{#each nav as item (item.href)}
-					<a
-						href={item.href}
-						class={active(item.href, item.exact) ? 'text-signal' : 'text-fg-dim'}>{item.label}</a
-					>
-				{/each}
-			</nav>
+		<header class="border-line bg-ink-2/80 border-b backdrop-blur-sm md:hidden">
+			<div class="flex items-center gap-4 px-4 py-3">
+				<a href="/" class="font-display font-900 tracking-tight">{SITE_NAME.toUpperCase()}</a>
+				<button
+					onclick={() => (navOpen = !navOpen)}
+					class="border-line text-fg-dim hover:text-fg ml-auto -my-1 flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius)] border"
+					aria-expanded={navOpen}
+					aria-controls="mobile-nav"
+					aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+				>
+					<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+						{#if navOpen}
+							<path d="M6 6l12 12M18 6L6 18" />
+						{:else}
+							<path d="M4 7h16M4 12h16M4 17h16" />
+						{/if}
+					</svg>
+				</button>
+			</div>
+			{#if navOpen}
+				<nav id="mobile-nav" class="border-line/70 grid grid-cols-2 gap-1 border-t px-3 py-3">
+					{#each nav as item (item.href)}
+						<a
+							href={item.href}
+							class="flex min-h-11 items-center rounded-[var(--radius)] px-3 text-sm {active(
+								item.href,
+								item.exact
+							)
+								? 'bg-signal/10 text-signal'
+								: 'text-fg-dim hover:text-fg'}">{item.label}</a
+						>
+					{/each}
+				</nav>
+			{/if}
 		</header>
 
 		<main class="flex-1">

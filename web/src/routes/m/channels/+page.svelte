@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount, tick } from 'svelte';
 	import { channels, type Channel } from '$lib/channels.svelte';
 	import { decryptGroupText } from '$lib/channel-crypto';
@@ -110,6 +111,8 @@
 	}
 	const input = 'w-full rounded-xl border border-line bg-panel px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-faint focus:border-signal/60 focus:outline-none';
 </script>
+
+<Seo title="Channels" description="Decrypted MeshCore group chat." path="/m/channels" />
 
 <div class="px-4 py-4">
 	{#if pane === 'list'}

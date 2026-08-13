@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -192,6 +193,8 @@
 	const maxSnr = $derived(Math.max(1, ...(data?.snrHist ?? []).map((b) => b.count)));
 	const maxNbr = $derived(Math.max(1, ...(data?.neighbors ?? []).map((n) => n.count)));
 </script>
+
+<Seo title={observer?.name || 'Observer'} description={`Telemetry and reception statistics for the ${observer?.name || 'observer'} listening post.`} path={`/observers/${id}`} />
 
 <PageHeader eyebrow="Listening Post" title={observer?.name ?? id}>
 	<div class="flex items-center gap-3">

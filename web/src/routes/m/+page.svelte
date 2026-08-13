@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Stats, type Node } from '$lib/api';
 	import { live } from '$lib/live.svelte';
@@ -32,6 +33,8 @@
 		{ label: 'Session', value: live.total, accent: false }
 	]);
 </script>
+
+<Seo title="Overview" description="Live MeshCore mesh overview." path="/m" />
 
 <div class="px-4 py-4">
 	<div class="mb-3 flex items-center gap-2">

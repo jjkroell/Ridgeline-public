@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Observer } from '$lib/api';
 	import { ago, fmtNum, isFresh } from '$lib/format';
@@ -27,6 +28,8 @@
 		return p.join(' · ');
 	}
 </script>
+
+<Seo title="Observers" description="Listening posts feeding this observatory." path="/m/observers" />
 
 <div class="px-4 py-4">
 	<div class="text-fg-faint mb-2 px-1 font-mono text-[0.62rem]">{observers.length} listening posts</div>

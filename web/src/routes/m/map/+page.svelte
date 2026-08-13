@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
@@ -264,6 +265,8 @@
 		return () => { clearInterval(t); map?.remove(); map = null; };
 	});
 </script>
+
+<Seo title="Map" description="Node locations and coverage." path="/m/map" />
 
 <div class="relative h-full w-full">
 	{#if !webglOk}

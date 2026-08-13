@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type Node } from '$lib/api';
@@ -27,6 +28,8 @@
 		return () => clearInterval(t);
 	});
 </script>
+
+<Seo title={node?.name || shortKey(pubkey, 8, 4)} description={`Node detail for ${node?.name || shortKey(pubkey, 8, 4)} on the MeshCore mesh: adverts heard, relay activity, observers and coverage.`} path={`/nodes/${pubkey}`} />
 
 <PageHeader eyebrow="Node Detail" title={node?.name || shortKey(pubkey, 8, 4)}>
 	{#snippet titleLeft()}<FavoriteStar {pubkey} size="md" />{/snippet}
