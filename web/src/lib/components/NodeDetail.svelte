@@ -384,7 +384,13 @@
 
 	<!-- Node Admin: claim, private location, notes — each in its own modal -->
 	<div class="mb-5">
-		<NodeAdmin {pubkey} seedLat={node?.latitude} seedLon={node?.longitude} />
+		<NodeAdmin
+			{pubkey}
+			seedLat={node?.latitude}
+			seedLon={node?.longitude}
+			nodeName={node?.name ?? ''}
+			retired={!!node?.retiredAt}
+		/>
 	</div>
 
 	<div class="grid gap-5 {compact ? '' : 'lg:grid-cols-3'}">

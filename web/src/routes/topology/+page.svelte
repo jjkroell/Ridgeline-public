@@ -84,6 +84,14 @@
 		</div>
 	</section>
 
+	{#if topo?.edges?.some((e) => e.inferred)}
+		<p class="text-fg-faint mt-3 text-center text-[0.68rem] leading-relaxed">
+			<span class="text-fg-dim">Dashed links are inferred.</span> Every observation of them was resolved
+			from 1-byte path hops, which only distinguish 256 nodes — so the adjacency is probably real, but
+			it is not a measurement.
+			<a href="/hash-ids#why" class="text-signal hover:underline">Why →</a>
+		</p>
+	{/if}
 	<p class="text-fg-faint mt-3 text-center font-mono text-[0.62rem]">
 		Inferred from observed flood paths — who hands off to whom across the mesh. Window {data?.windowHours?.toFixed(
 			1

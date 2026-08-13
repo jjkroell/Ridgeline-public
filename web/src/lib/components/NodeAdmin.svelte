@@ -9,15 +9,26 @@
 	import ClaimPanel from './ClaimPanel.svelte';
 	import PrivateLocationPanel from './PrivateLocationPanel.svelte';
 	import NotesPanel from './NotesPanel.svelte';
+	import NodeLifecyclePanel from './NodeLifecyclePanel.svelte';
 
 	interface Props {
 		pubkey: string;
 		seedLat?: number | null;
 		seedLon?: number | null;
+		/** Node display name — used to confirm the destructive action by typing it. */
+		nodeName?: string;
+		/** Whether the node is currently owner-retired. */
+		retired?: boolean;
 	}
-	let { pubkey, seedLat = null, seedLon = null }: Props = $props();
+	let {
+		pubkey,
+		seedLat = null,
+		seedLon = null,
+		nodeName = '',
+		retired = false
+	}: Props = $props();
 
-	type Which = '' | 'claim' | 'location' | 'notes';
+	type Which = '' | 'claim' | 'location' | 'notes' | 'lifecycle';
 	let open = $state<Which>('');
 
 	// Summaries shown on the buttons.
@@ -81,7 +92,8 @@
 	const titles: Record<Exclude<Which, ''>, string> = {
 		claim: 'Ownership',
 		location: 'Private location',
-		notes: 'Notes'
+		notes: 'Notes',
+		lifecycle: 'Retire or delete'
 	};
 </script>
 
@@ -169,6 +181,40 @@
 			</button>
 		{/if}
 
+		<!-- Lifecycle: owner-only, so it appears once ownership is confirmed. -->
+		{#if claim?.ownedByMe}
+			<button
+				type="button"
+				onclick={() => (open = 'lifecycle')}
+				class="border-line/60 hover:border-line hover:bg-panel-2/40 flex w-full items-center gap-3 rounded-[var(--radius)] border px-3.5 py-3 text-left transition-colors"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					class="text-signal h-4 w-4 shrink-0"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.6"
+					stroke-linecap="round"
+					stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v5M14 11v5" /></svg
+				>
+				<span class="min-w-0 flex-1">
+					<span class="text-fg block text-sm font-600">Retire or delete</span>
+					<span class="text-fg-faint block truncate text-xs"
+						>{retired ? 'Retired — hidden from the map' : 'Withdraw this node, or erase it'}</span
+					>
+				</span>
+				<svg
+					viewBox="0 0 24 24"
+					class="text-fg-faint h-4 w-4 shrink-0"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linecap="round"
+					stroke-linejoin="round"><path d="M9 6l6 6-6 6" /></svg
+				>
+			</button>
+		{/if}
+
 		<!-- Notes -->
 		<button
 			type="button"
@@ -230,6 +276,16 @@
 				<PrivateLocationPanel {pubkey} {seedLat} {seedLon} />
 			{:else if open === 'notes'}
 				<NotesPanel {pubkey} onchanged={loadSummary} />
+			{:else if open === 'lifecycle'}
+				<NodeLifecyclePanel
+					{pubkey}
+					{nodeName}
+					{retired}
+					onchange={(state) => {
+						loadSummary();
+						if (state === 'scrubbed') close();
+					}}
+				/>
 			{/if}
 		</div>
 	</Modal>

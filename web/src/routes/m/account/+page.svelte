@@ -2,13 +2,62 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
-	import { authApi, claims, shares, type ClaimWithNode, type SharedWithMe } from '$lib/api';
+	import {
+		authApi,
+		claims,
+		nodeLifecycle,
+		shares,
+		type ClaimWithNode,
+		type SharedWithMe
+	} from '$lib/api';
 	import { ago, shortKey } from '$lib/format';
 	import OwnershipIcon from '$lib/components/OwnershipIcon.svelte';
 	import AccountSettings from '$lib/components/AccountSettings.svelte';
 	import DeleteAccountPanel from '$lib/components/DeleteAccountPanel.svelte';
 
 	let myNodes = $state<ClaimWithNode[]>([]);
+	// Dormant claims have no node page to release from — see the desktop account
+	// page for the full reasoning. Without this they are unremovable.
+	let releasing = $state('');
+	let releaseErr = $state('');
+
+	// Release leaves the owner's notes orphaned; scrub cascades them. See the
+	// desktop account page for why this second action has to live here.
+	async function purgeClaim(pubkey: string, name: string) {
+		if (releasing) return;
+		if (
+			!confirm(
+				`Delete everything for ${name}?\n\nRemoves your claim, your notes, and any private location. It cannot be undone.`
+			)
+		)
+			return;
+		releasing = pubkey;
+		releaseErr = '';
+		try {
+			await nodeLifecycle.scrub(auth.csrf, pubkey);
+			myNodes = myNodes.filter((n) => n.nodePubkey !== pubkey);
+		} catch (e) {
+			releaseErr = e instanceof Error ? e.message : 'Could not delete this node';
+		} finally {
+			releasing = '';
+		}
+	}
+
+	async function releaseClaim(pubkey: string, name: string) {
+		if (releasing) return;
+		if (!confirm(`Release your claim on ${name}?\n\nThis node is no longer in the mesh. If it advertises again it will come back unclaimed.`))
+			return;
+		releasing = pubkey;
+		releaseErr = '';
+		try {
+			await claims.release(auth.csrf, pubkey);
+			myNodes = myNodes.filter((n) => n.nodePubkey !== pubkey);
+		} catch (e) {
+			releaseErr = e instanceof Error ? e.message : 'Could not release the claim';
+		} finally {
+			releasing = '';
+		}
+	}
 	async function loadMyNodes() {
 		try {
 			myNodes = await claims.mine();
@@ -179,6 +228,18 @@
 							{#if !c.nodePresent}
 								<span class="border-line text-fg-dim rounded-full border px-2.5 py-1 text-xs font-600"
 									>Dormant</span
+								>
+								<button
+									onclick={() => releaseClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
+									disabled={releasing === c.nodePubkey}
+									class="text-fg-faint hover:text-fg shrink-0 text-xs underline underline-offset-2 disabled:opacity-50"
+									>{releasing === c.nodePubkey ? '…' : 'Release'}</button
+								>
+								<button
+									onclick={() => purgeClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
+									disabled={releasing === c.nodePubkey}
+									class="text-fg-faint hover:text-coral shrink-0 text-xs underline underline-offset-2 disabled:opacity-50"
+									>Delete all</button
 								>
 							{:else if c.status === 'verified'}
 								<span class="bg-signal/15 text-signal rounded-full px-2.5 py-1 text-xs font-600">Owned</span>

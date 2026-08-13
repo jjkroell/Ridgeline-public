@@ -28,6 +28,11 @@ type Node struct {
 	// HashSize is the node's path-hash length in bytes (1, 2, or 3), learned
 	// from its advert. 0 means not yet known.
 	HashSize int `json:"hashSize"`
+	// RetiredAt is set when the node's verified owner has withdrawn it from the
+	// map and node lists. Everything it sent is kept. ListNodes still RETURNS
+	// retired nodes — they remain subject to retention and still resolve as relay
+	// hops — so the public API filters them out at its own boundary.
+	RetiredAt string `json:"retiredAt,omitempty"`
 	// GpsSuspect marks a located node whose coordinates are a statistical
 	// outlier versus the rest of the mesh — likely corrupt GPS.
 	GpsSuspect bool `json:"gpsSuspect"`
@@ -85,7 +90,7 @@ func (s *Store) ListNodes() ([]Node, error) {
 		SELECT pubkey, COALESCE(name,''), COALESCE(role,''),
 		       latitude, longitude, has_location,
 		       first_seen, last_seen, COALESCE(last_advert,''), advert_count, advert_tx_count,
-		       COALESCE(hash_size, 0), COALESCE(radio,'')
+		       COALESCE(hash_size, 0), COALESCE(radio,''), COALESCE(retired_at,'')
 		FROM nodes
 		ORDER BY last_seen DESC`)
 	if err != nil {
@@ -99,7 +104,7 @@ func (s *Store) ListNodes() ([]Node, error) {
 		var hasLoc int
 		if err := rows.Scan(&n.PublicKey, &n.Name, &n.Role,
 			&n.Latitude, &n.Longitude, &hasLoc,
-			&n.FirstSeen, &n.LastSeen, &n.LastAdvert, &n.AdvertCount, &n.AdvertTxCount, &n.HashSize, &n.Radio); err != nil {
+			&n.FirstSeen, &n.LastSeen, &n.LastAdvert, &n.AdvertCount, &n.AdvertTxCount, &n.HashSize, &n.Radio, &n.RetiredAt); err != nil {
 			return nil, err
 		}
 		n.HasLocation = hasLoc != 0

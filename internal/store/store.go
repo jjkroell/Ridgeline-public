@@ -6,6 +6,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,6 +150,23 @@ CREATE INDEX IF NOT EXISTS idx_pw_reset_user ON password_resets(user_id);
 -- the ingest verifier promotes it to 'verified' when a signature-valid advert
 -- from that node carries the code. One verified owner per node (partial unique
 -- index below); one claim row per (node,user).
+-- audit_log records destructive owner-initiated actions. It exists because the
+-- act of scrubbing a node deletes its claim — the only record of who owned it —
+-- so without this there would be no trace of who removed what from a shared
+-- public observatory. Written BEFORE the cascade, and deliberately not keyed to
+-- users(id) or nodes(pubkey): the row must outlive both.
+CREATE TABLE IF NOT EXISTS audit_log (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	at          TEXT NOT NULL,
+	actor_id    INTEGER,                 -- users.id at the time; NOT a foreign key
+	actor_email TEXT NOT NULL DEFAULT '',
+	action      TEXT NOT NULL,           -- node_retire | node_unretire | node_scrub
+	target      TEXT NOT NULL,           -- node pubkey, uppercase hex
+	detail      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target);
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at);
+
 CREATE TABLE IF NOT EXISTS node_claims (
 	id          INTEGER PRIMARY KEY AUTOINCREMENT,
 	node_pubkey TEXT NOT NULL,           -- uppercase hex
@@ -283,6 +301,11 @@ func Open(path string) (*Store, error) {
 	// prev_owner_name records a node's last verified owner after they delete their
 	// account, so the public page can show "previously owned by …".
 	db.Exec(`ALTER TABLE nodes ADD COLUMN prev_owner_name TEXT`)
+	// retired_at withdraws a node from the map/lists without deleting anything it
+	// sent. The node upsert's ON CONFLICT branch never touches this column, so a
+	// re-advert leaves a retired node retired — the same reason RetireObserver
+	// keeps its row rather than deleting it.
+	db.Exec(`ALTER TABLE nodes ADD COLUMN retired_at TEXT`)
 	// The observer's friendly name is a label, not its identity — see
 	// migrateObserversToPubkey, run at the end of migrate().
 	db.Exec(`ALTER TABLE observers ADD COLUMN name TEXT`)
@@ -365,6 +388,83 @@ func (s *Store) RetireObserver(id, at string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`UPDATE observers SET retired_at = ? WHERE id = ?`, at, id)
+	return err
+}
+
+// RetireNode withdraws a node from the map and node lists while keeping every
+// packet it sent. The row stays on purpose: the advert upsert's ON CONFLICT
+// branch leaves retired_at alone, so a node that is still transmitting stays
+// hidden instead of reappearing on its next advert (which is what makes this
+// meaningful for a decommissioned node that is briefly still on air).
+func (s *Store) RetireNode(pubkey, at string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE nodes SET retired_at = ? WHERE UPPER(pubkey) = ?`, at, strings.ToUpper(pubkey))
+	return err
+}
+
+// UnretireNode returns a retired node to the map and node lists.
+func (s *Store) UnretireNode(pubkey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE nodes SET retired_at = NULL WHERE UPPER(pubkey) = ?`, strings.ToUpper(pubkey))
+	return err
+}
+
+// IsNodeRetired reports whether a node is currently withdrawn.
+func (s *Store) IsNodeRetired(pubkey string) (bool, error) {
+	var retired sql.NullString
+	err := s.db.QueryRow(`SELECT retired_at FROM nodes WHERE UPPER(pubkey) = ?`, strings.ToUpper(pubkey)).Scan(&retired)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return retired.Valid && retired.String != "", err
+}
+
+// AuditEntry is one recorded destructive action.
+type AuditEntry struct {
+	At         string `json:"at"`
+	ActorID    int64  `json:"actorId"`
+	ActorEmail string `json:"actorEmail"`
+	Action     string `json:"action"`
+	Target     string `json:"target"`
+	Detail     string `json:"detail,omitempty"`
+}
+
+// ListAudit returns the audit rows for a target (uppercase hex), newest first.
+// Pass "" for every row.
+func (s *Store) ListAudit(target string) ([]AuditEntry, error) {
+	q := `SELECT at, COALESCE(actor_id,0), actor_email, action, target, detail FROM audit_log`
+	args := []any{}
+	if target != "" {
+		q += ` WHERE target = ?`
+		args = append(args, strings.ToUpper(target))
+	}
+	q += ` ORDER BY at DESC`
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AuditEntry{}
+	for rows.Next() {
+		var a AuditEntry
+		if err := rows.Scan(&a.At, &a.ActorID, &a.ActorEmail, &a.Action, &a.Target, &a.Detail); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// WriteAudit records a destructive action. Best-effort by design: an audit
+// failure must not block the user's action, but it is logged by the caller.
+func (s *Store) WriteAudit(at string, actorID int64, actorEmail, action, target, detail string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(
+		`INSERT INTO audit_log (at, actor_id, actor_email, action, target, detail) VALUES (?,?,?,?,?,?)`,
+		at, actorID, actorEmail, action, strings.ToUpper(target), detail)
 	return err
 }
 

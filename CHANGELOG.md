@@ -4,6 +4,46 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.0] — 2026-08-13
+
+### Added
+- **Owners can retire or delete their own nodes.** A verified owner no longer
+  needs an admin to remove a node they control. Ownership is proved
+  cryptographically, so this is a signature check rather than a flag.
+  **Retire** withdraws the node from the map and node lists while keeping every
+  packet it sent and your claim; it survives a re-advert, so it is the right
+  action for a decommissioned node that is briefly still on air, and it is
+  reversible. **Delete** is permanent, requires typing the node's name to
+  confirm, and says plainly what it does: it releases your claim (an orphaned
+  claim would block the node from ever being re-claimed) and it removes
+  observations that other operators' receivers recorded. Users get no access to
+  the blocklist — blocking plus a released claim would strand a node that can
+  neither reappear nor be re-claimed. Destructive actions are recorded in a new
+  audit log, written before the deletion, because the claim that names the owner
+  is removed by the same operation.
+- **Dormant claims can be cleared.** A claim outlives its node on purpose: the
+  retention sweep prunes a silent node's row but keeps ownership so it
+  reconnects if the node returns. Those entries showed on the account page as
+  greyed-out "Dormant" rows with no way to act on them — the only release
+  control lived on a node page that no longer existed. Both account pages now
+  offer **Release** (give up ownership, keep your notes) and **Delete
+  everything** (also removes your notes and any private location, which release
+  leaves behind).
+
+### Fixed
+- **Weak hop attributions are no longer treated as certain.** A path hop is
+  matched to a node by unique prefix at whatever width the sender chose. That
+  guards against two known nodes sharing a prefix, but not against saturation:
+  a busy mesh exercises almost the whole 1-byte space within a week, so a
+  1-byte hop matching one known node may have been written by a node never
+  seen. Injection detection — which ends in an admin quarantining a node — now
+  requires 2-byte evidence, matching node retention. Topology edges seen only
+  via 1-byte hops are marked as inferences and drawn dashed, with a note
+  explaining why; a single 2-byte sighting promotes an edge to a measurement.
+  Aggregate relay counts and heatmaps deliberately keep using the permissive
+  match, where the effect measured about 5% and dropping real signal would cost
+  more than the noise.
+
 ## [v0.8.1] — 2026-08-13
 
 ### Fixed

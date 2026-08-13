@@ -57,6 +57,13 @@ type TopologyEdge struct {
 	A      string `json:"a"`
 	B      string `json:"b"`
 	Weight int    `json:"weight"`
+	// Inferred marks an edge every observation of which was resolved from 1-byte
+	// path hops. Those are weak evidence — the 1-byte space is ~97% saturated, so
+	// a hop matching one known node may have been written by a node we have never
+	// seen (see newPrefixResolver's caveat). The adjacency is probably real, but
+	// it is an inference rather than a measurement, and the graph draws it as one.
+	// An edge seen even once at 2+ bytes is NOT inferred.
+	Inferred bool `json:"inferred,omitempty"`
 }
 
 // ObserverCoverage summarises one observer's RF reach: how much it heard, how many
@@ -175,6 +182,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 	active := map[string]bool{}               // distinct participating pubkeys
 	relayHits := map[string]map[string]bool{} // pubkey → set of messageHashes relayed
 	relayPath := map[string][]string{}        // messageHash → resolved consecutive hop sequence
+	relayPathWide := map[string][]bool{}      // parallel: was each hop >=2 bytes wide?
 	var scoreSum float64
 	var scoreN int
 	linkBins := make([]int, 5) // [0-.2,.2-.4,.4-.6,.6-.8,.8-1]
@@ -270,11 +278,13 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 			}
 		}
 		var seq []string
+		var seqWide []bool // was this hop resolved from >=2 bytes?
 		for _, hop := range pkt.RelayPath() {
 			rk := strings.ToUpper(resolve(hop))
 			if rk == "" {
 				continue
 			}
+			seqWide = append(seqWide, len(hop)/2 >= 2)
 			active[rk] = true
 			if relayHits[rk] == nil {
 				relayHits[rk] = map[string]bool{}
@@ -287,6 +297,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 		if len(seq) > 1 {
 			if _, ok := relayPath[pkt.MessageHash]; !ok {
 				relayPath[pkt.MessageHash] = seq
+				relayPathWide[pkt.MessageHash] = seqWide
 			}
 		}
 	}
@@ -468,7 +479,7 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 	out.KPIs.CongestionTier = congestionTier(out.KPIs.ChannelUtilPct)
 
 	// Relay backbone (node-to-node topology) from the representative flood paths.
-	out.Topology = buildTopology(relayPath, relayHits, byKey, 60)
+	out.Topology = buildTopology(relayPath, relayPathWide, relayHits, byKey, 60)
 
 	return out, nil
 }
@@ -478,19 +489,28 @@ func MeshSummary(st *store.Store, nodes []store.Node, sinceISO string, scanCap i
 // how many paths used it. Nodes are ranked by distinct transmissions forwarded
 // and capped at maxNodes; edges are kept only between surviving nodes so the
 // payload (and the viz) stays legible on a busy mesh.
-func buildTopology(relayPath map[string][]string, relayHits map[string]map[string]bool, byKey map[string]store.Node, maxNodes int) Topology {
-	// Aggregate undirected edge weights from consecutive hops.
+func buildTopology(relayPath map[string][]string, relayPathWide map[string][]bool, relayHits map[string]map[string]bool, byKey map[string]store.Node, maxNodes int) Topology {
+	// Aggregate undirected edge weights from consecutive hops. An edge is only
+	// "measured" if BOTH its endpoints were resolved from a >=2-byte hop at least
+	// once; otherwise every sighting of it rests on saturated 1-byte evidence and
+	// it is reported as an inference.
 	edgeW := map[[2]string]int{}
-	for _, seq := range relayPath {
+	edgeWide := map[[2]string]bool{}
+	for hash, seq := range relayPath {
+		wide := relayPathWide[hash]
 		for i := 0; i+1 < len(seq); i++ {
 			a, b := seq[i], seq[i+1]
 			if a == b {
 				continue
 			}
+			bothWide := i+1 < len(wide) && wide[i] && wide[i+1]
 			if a > b {
 				a, b = b, a
 			}
 			edgeW[[2]string{a, b}]++
+			if bothWide {
+				edgeWide[[2]string{a, b}] = true
+			}
 		}
 	}
 
@@ -523,7 +543,7 @@ func buildTopology(relayPath map[string][]string, relayHits map[string]map[strin
 	}
 	for e, w := range edgeW {
 		if keep[e[0]] && keep[e[1]] {
-			out.Edges = append(out.Edges, TopologyEdge{A: e[0], B: e[1], Weight: w})
+			out.Edges = append(out.Edges, TopologyEdge{A: e[0], B: e[1], Weight: w, Inferred: !edgeWide[e]})
 		}
 	}
 	sort.Slice(out.Edges, func(i, j int) bool { return out.Edges[i].Weight > out.Edges[j].Weight })

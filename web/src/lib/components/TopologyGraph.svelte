@@ -67,7 +67,7 @@
 		}));
 		const E = edges
 			.filter((e) => idx.has(e.a) && idx.has(e.b))
-			.map((e) => ({ a: idx.get(e.a)!, b: idx.get(e.b)!, w: e.weight }));
+			.map((e) => ({ a: idx.get(e.a)!, b: idx.get(e.b)!, w: e.weight, inf: !!e.inferred }));
 		const adj: Set<number>[] = P.map(() => new Set());
 		for (const e of E) {
 			adj[e.a].add(e.b);
@@ -183,11 +183,16 @@
 						? 'rgba(139,155,173,.06)'
 						: 'rgba(139,155,173,.22)';
 				ctx.lineWidth = (on ? 2 : 1) / scale;
+				// An edge resolved only from 1-byte hops is an inference, not a
+				// measurement — dashed, matching how PacketPathMap draws a hop whose
+				// prefix could belong to several nodes.
+				ctx.setLineDash(e.inf ? [4 / scale, 3 / scale] : []);
 				ctx.beginPath();
 				ctx.moveTo(P[e.a].x, P[e.a].y);
 				ctx.lineTo(P[e.b].x, P[e.b].y);
 				ctx.stroke();
 			}
+			ctx.setLineDash([]);
 			for (let i = 0; i < P.length; i++) {
 				const p = P[i],
 					r = rad(p),

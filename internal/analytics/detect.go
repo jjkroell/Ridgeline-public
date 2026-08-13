@@ -201,7 +201,11 @@ func DetectInjection(st *store.Store, nodes []store.Node, sinceISO string, scanC
 	for _, n := range nodes {
 		byKey[strings.ToUpper(n.PublicKey)] = n
 	}
-	resolve := newPrefixResolver(nodes)
+	// Injection detection ends in an admin quarantining or purging a node, so a
+	// false attribution here is expensive in a way it is not for a relay count.
+	// Require ≥2-byte hops: the 1-byte space is ~97% saturated, so a narrow hop
+	// matching one known node is not evidence that node carried the packet.
+	resolve := newPrefixResolverMin(nodes, 2)
 
 	var packets, pathed, unresolved int // all payload types
 	var scanned, rejected int           // adverts seen / dropped as unverifiable

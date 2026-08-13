@@ -2,7 +2,14 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
-	import { authApi, claims, shares, type ClaimWithNode, type SharedWithMe } from '$lib/api';
+	import {
+		authApi,
+		claims,
+		nodeLifecycle,
+		shares,
+		type ClaimWithNode,
+		type SharedWithMe
+	} from '$lib/api';
 	import { ago, shortKey } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import OwnershipIcon from '$lib/components/OwnershipIcon.svelte';
@@ -51,6 +58,52 @@
 
 	// The caller's node claims (pending + owned).
 	let myNodes = $state<ClaimWithNode[]>([]);
+	// Releasing a DORMANT claim. Retention prunes a silent node's row but leaves
+	// the claim, so these entries have no node page to release from — without an
+	// action here they are unremovable. DELETE /api/claims/{pubkey} never touches
+	// the nodes table, so it works fine with the node gone.
+	let releasing = $state('');
+	let releaseErr = $state('');
+
+	// A dormant node's row is already gone, so releasing the claim leaves the
+	// owner's NOTES orphaned with nothing to attach to. Scrub cascades those too,
+	// but its only other entry point is the node detail page — which does not
+	// exist for a dormant node. Hence this second, explicit action.
+	async function purgeClaim(pubkey: string, name: string) {
+		if (releasing) return;
+		if (
+			!confirm(
+				`Delete everything for ${name}?\n\nRemoves your claim, your notes, and any private location for this node. It cannot be undone.`
+			)
+		)
+			return;
+		releasing = pubkey;
+		releaseErr = '';
+		try {
+			await nodeLifecycle.scrub(auth.csrf, pubkey);
+			myNodes = myNodes.filter((n) => n.nodePubkey !== pubkey);
+		} catch (e) {
+			releaseErr = e instanceof Error ? e.message : 'Could not delete this node';
+		} finally {
+			releasing = '';
+		}
+	}
+
+	async function releaseClaim(pubkey: string, name: string) {
+		if (releasing) return;
+		if (!confirm(`Release your claim on ${name}?\n\nThis node is no longer in the mesh. If it advertises again it will come back unclaimed, and you (or anyone) can claim it then.`))
+			return;
+		releasing = pubkey;
+		releaseErr = '';
+		try {
+			await claims.release(auth.csrf, pubkey);
+			myNodes = myNodes.filter((n) => n.nodePubkey !== pubkey);
+		} catch (e) {
+			releaseErr = e instanceof Error ? e.message : 'Could not release the claim';
+		} finally {
+			releasing = '';
+		}
+	}
 	async function loadMyNodes() {
 		try {
 			myNodes = await claims.mine();
@@ -198,6 +251,9 @@
 					{@render chevron(openNodes)}
 				</button>
 				{#if openNodes}
+				{#if releaseErr}
+						<div class="text-coral px-5 py-2 text-xs">{releaseErr}</div>
+					{/if}
 				<div class="divide-line/60 divide-y">
 					{#each myNodes as c (c.id)}
 						<!-- A claim outlives its node: retention prunes silent nodes but ownership
@@ -222,6 +278,22 @@
 										>Dormant</span
 									>
 								</Tooltip>
+								<!-- A dormant claim has no node page, so this is the only place it can
+								     be released from. -->
+								<button
+									onclick={() => releaseClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
+									disabled={releasing === c.nodePubkey}
+									class="text-fg-faint hover:text-fg shrink-0 text-xs underline underline-offset-2 transition-colors disabled:opacity-50"
+									title="Give up ownership. Your notes on this node are kept."
+									>{releasing === c.nodePubkey ? 'Releasing…' : 'Release'}</button
+								>
+								<button
+									onclick={() => purgeClaim(c.nodePubkey, c.nodeName || shortKey(c.nodePubkey))}
+									disabled={releasing === c.nodePubkey}
+									class="text-fg-faint hover:text-coral shrink-0 text-xs underline underline-offset-2 transition-colors disabled:opacity-50"
+									title="Remove the claim, your notes and any private location for this node."
+									>Delete everything</button
+								>
 							{:else if c.status === 'verified'}
 								<span class="bg-signal/15 text-signal rounded-full px-2.5 py-1 text-xs font-600"
 									>Owned</span

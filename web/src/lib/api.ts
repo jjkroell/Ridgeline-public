@@ -24,6 +24,10 @@ export interface Node {
 	advertTxCount: number;
 	/** Path-hash length in bytes (1, 2, or 3), from the node's advert; 0 = unknown. */
 	hashSize: number;
+	/** Set when the node's verified owner has withdrawn it from the map and node
+	 *  lists. Retired nodes are filtered out of /api/nodes, so this is normally
+	 *  only seen on a direct node fetch. */
+	retiredAt?: string;
 	/** Coordinates are a statistical outlier — likely corrupt GPS. */
 	gpsSuspect?: boolean;
 	/** "freq,bw,sf,cr" config, inherited from the observer that heard it. */
@@ -274,6 +278,10 @@ export interface TopologyEdge {
 	a: string;
 	b: string;
 	weight: number;
+	/** Every observation of this adjacency was resolved from 1-byte path hops.
+	 *  Those are weak evidence (the 1-byte space is ~97% saturated), so the link
+	 *  is probably real but is an inference, not a measurement. Drawn dashed. */
+	inferred?: boolean;
 }
 export interface Topology {
 	nodes: TopologyNode[];
@@ -739,6 +747,36 @@ export interface ClaimWithNode extends Claim {
 	 *  as dormant rather than linking to a node page that would 404. */
 	nodePresent: boolean;
 }
+
+/** Result of a scrub — what was actually deleted. */
+export interface ScrubResult {
+	nodes: number;
+	observations: number;
+	claims: number;
+	notes: number;
+	locations: number;
+	shares: number;
+}
+
+/**
+ * Owner-initiated node lifecycle. Every call requires a VERIFIED claim on the
+ * node — proved cryptographically, so these are safe to expose to members.
+ *
+ * retire is reversible and keeps everything the node sent; scrub is permanent,
+ * deletes observations reported by other operators' receivers, and releases the
+ * claim (an orphaned claim would block the node from ever being re-claimed).
+ */
+export const nodeLifecycle = {
+	retire: (csrf: string, pubkey: string) =>
+		mutate<{ retired: boolean }>(`/api/nodes/${encodeURIComponent(pubkey)}/retire`, 'POST', csrf),
+	unretire: (csrf: string, pubkey: string) =>
+		mutate<{ retired: boolean }>(`/api/nodes/${encodeURIComponent(pubkey)}/unretire`, 'POST', csrf),
+	/** Permanent. deleteHistory must be true — the server refuses otherwise. */
+	scrub: (csrf: string, pubkey: string) =>
+		mutate<ScrubResult>(`/api/nodes/${encodeURIComponent(pubkey)}/scrub`, 'POST', csrf, {
+			deleteHistory: true
+		})
+};
 
 export const claims = {
 	/** Public: ownership + the caller's own claim status for a node. */

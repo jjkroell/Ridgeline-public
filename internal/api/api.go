@@ -47,6 +47,10 @@ type Server struct {
 	// client IP and by target account (login only).
 	authIPLimiter   *rateLimiter
 	authAddrLimiter *rateLimiter
+	// nodeLifecycleLimiter bounds owner-initiated retire/scrub. Keyed by user
+	// rather than IP: the action is irreversible and per-account, and a shared
+	// NAT must not let one user exhaust another's budget.
+	nodeLifecycleLimiter *rateLimiter
 }
 
 // maxRequestBody caps the size of a request body the API will read. Every
@@ -89,8 +93,9 @@ func New(st *store.Store, log *slog.Logger, version, webDir string) *Server {
 		emailAddrLimiter: newRateLimiter(1.0/600, 2),
 		// Login/reset brute-force: ~10 attempts/IP then 1 every 6s; ~5 per account
 		// then 1 every 30s — generous for a mistyped password, tight for guessing.
-		authIPLimiter:   newRateLimiter(1.0/6, 10),
-		authAddrLimiter: newRateLimiter(1.0/30, 5),
+		nodeLifecycleLimiter: newRateLimiter(1.0/30, 5), // ~2/min sustained, burst 5
+		authIPLimiter:        newRateLimiter(1.0/6, 10),
+		authAddrLimiter:      newRateLimiter(1.0/30, 5),
 	}
 }
 
@@ -138,6 +143,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/claims/mine", s.requireUser(s.claimsMine))
 	mux.HandleFunc("DELETE /api/claims/{pubkey}", s.requireUser(s.claimDelete))
 	// Alternative ownership proof: sign a server challenge with the node's private key.
+	mux.HandleFunc("POST /api/nodes/{pubkey}/retire", s.requireUser(s.nodeRetire))
+	mux.HandleFunc("POST /api/nodes/{pubkey}/unretire", s.requireUser(s.nodeUnretire))
+	mux.HandleFunc("POST /api/nodes/{pubkey}/scrub", s.requireUser(s.nodeScrub))
 	mux.HandleFunc("POST /api/nodes/{pubkey}/claim/key-challenge", s.requireUser(s.claimKeyChallenge))
 	mux.HandleFunc("POST /api/nodes/{pubkey}/claim/key-verify", s.requireUser(s.claimKeyVerify))
 
@@ -341,12 +349,27 @@ type nodeWithLiveness struct {
 	UnscopedRelayCount int `json:"unscopedRelayCount,omitempty"`
 }
 
+// activeNodes drops owner-retired nodes from a listing.
+func activeNodes(in []store.Node) []store.Node {
+	out := in[:0:0]
+	for _, n := range in {
+		if n.RetiredAt == "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 func (s *Server) nodes(w http.ResponseWriter, _ *http.Request) {
 	nodes, err := s.store.ListNodes()
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	// Retired nodes are withdrawn from the public list by their owner. The store
+	// still returns them (retention and hop resolution need the full set), so the
+	// filter lives here at the API boundary.
+	nodes = activeNodes(nodes)
 	var live map[string]analytics.LiveSignal
 	if s.analytics != nil {
 		live = s.analytics.Liveness()
