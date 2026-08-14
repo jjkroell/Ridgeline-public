@@ -228,10 +228,12 @@
 			{/each}
 		</div>
 		<div class="text-fg-faint mt-3 text-xs leading-relaxed">
-			This is the width of the <em>packet</em>, not a per-node setting. A relay writes its prefix at
-			whatever width the sender chose, so at {byteLen} byte{byteLen > 1 ? 's' : ''}
+			This is the width a <em>packet's</em> path is written at. It is a per-node setting —
+			<code class="font-mono text-[0.7rem]">path.hash.mode</code> — but it belongs to the node that
+			<span class="text-fg-dim">sends</span> the packet, and it then applies to every hop that
+			packet takes. So at {byteLen} byte{byteLen > 1 ? 's' : ''}
 			<span class="text-fg-dim">every</span> routing node is identified by its first {byteLen}
-			byte{byteLen > 1 ? 's' : ''} — whatever its own adverts use.
+			byte{byteLen > 1 ? 's' : ''} — whatever its own setting is.
 			{#if !loading}
 				<span class="text-fg-dim tnum">{used.size.toLocaleString()} of {space.toLocaleString()}</span
 				>

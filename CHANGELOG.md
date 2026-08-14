@@ -4,6 +4,17 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.5] — 2026-08-13
+
+### Fixed
+- **The hash-ID planner denied that the path width is a node setting.** The
+  length selector explained itself with "this is the width of the packet, not a
+  per-node setting", which contradicted the guide page it links to: the width
+  *is* a per-node setting (`path.hash.mode`) — it just belongs to the node that
+  **sends** the packet, and it then governs every hop that packet takes. The
+  copy now says that, so the panel and the guide agree and the reader is not
+  told the setting they are about to change does not exist.
+
 ## [v0.9.4] — 2026-08-13
 
 ### Added
