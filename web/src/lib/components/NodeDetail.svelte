@@ -408,10 +408,18 @@
 						{#if hashId.artifactOf}
 							<span class="font-mono text-coral bg-coral/10 rounded-[var(--radius)] px-1.5 py-0.5 text-[0.62rem]">corrupted copy</span>
 						{:else if hashId.shared === 0}
-							<span class="font-mono text-signal bg-signal/10 rounded-[var(--radius)] px-1.5 py-0.5 text-[0.62rem]">unique</span>
+							<!-- Scoped on purpose: uniqueness is only claimed at THIS node's width.
+							     A sender emitting a narrower path exposes it at that narrower width,
+							     where it may well collide — 96 of 197 routing nodes are unique at
+							     their own width and ambiguous in a 1-byte path. -->
+							<Tooltip
+								text="Unique at {hashId.bytes} byte{hashId.bytes > 1 ? 's' : ''} — no other routing node shares this prefix. A sender using a narrower path exposes this node at that width instead, where it may not be unique."
+							>
+								<span class="font-mono text-signal bg-signal/10 rounded-[var(--radius)] px-1.5 py-0.5 text-[0.62rem]">unique at {hashId.bytes} byte{hashId.bytes > 1 ? 's' : ''}</span>
+							</Tooltip>
 						{:else}
 							<Tooltip
-								text="{hashId.shared} other {hashId.bytes}-byte node{hashId.shared > 1 ? 's' : ''} share this hash ID. Open the Identity page to compare them."
+								text="{hashId.shared} other routing node{hashId.shared > 1 ? 's' : ''} share this hash ID at {hashId.bytes} byte{hashId.bytes > 1 ? 's' : ''} — whatever width their own adverts use. Open the Identity page to compare them."
 							>
 								<a
 									href="/identity?len={hashId.bytes}&id={hashId.hex}"

@@ -92,13 +92,14 @@
 		groups.flatMap((g) => g.nodes).filter((n) => n.hashSize === byteLen)
 	);
 
-	// Same-length path nodes occupying the typed prefix (shown when it's in use).
+	// Path nodes occupying the typed prefix (shown when it's in use). Deliberately
+	// NOT filtered to nodes whose own adverts use this width: the prefix is taken
+	// at this width by whoever holds it, whatever they advertise at. Filtering on
+	// hashSize left 180 of 197 occupied 2-byte prefixes reporting "in use" with an
+	// empty occupant list — status said taken and the panel named nobody.
 	const occupants = $derived(
 		status === 'used'
-			? nodes.filter(
-					(n) =>
-						isPathNode(n) && n.hashSize === byteLen && nodePrefix(n, byteLen) === prefix.toUpperCase()
-				)
+			? nodes.filter((n) => isPathNode(n) && nodePrefix(n, byteLen) === prefix.toUpperCase())
 			: []
 	);
 
@@ -187,7 +188,9 @@
 		incomplete: `${want - prefix.length} more hex character${want - prefix.length === 1 ? '' : 's'}`,
 		invalid: 'Not valid hex',
 		reserved: 'Reserved by MeshCore (00 / FF)',
-		used: `In use by another ${byteLen}-byte node`,
+		// Not "another N-byte node": the occupier holds this prefix at this width
+		// whatever its own adverts use.
+		used: 'In use by another routing node',
 		free: 'Available'
 	});
 	const statusColor: Record<string, string> = {
@@ -221,8 +224,12 @@
 						: 'border-line text-fg-dim hover:border-line-bright hover:text-fg'}"
 				>
 					{l}-byte
+					<!-- The count is the ADVERT cohort, not "nodes affected at this width" —
+					     every routing node is exposed at whatever width the sender picks, so
+					     labelling it "N nodes" on a packet-width selector reads as the wrong
+					     quantity. -->
 					<span class="ml-1 font-mono text-xs {byteLen === l ? 'text-signal/70' : 'text-fg-faint'}">
-						{#if !loading}{cohorts[l]} node{cohorts[l] === 1 ? '' : 's'}{:else}{l * 2} hex{/if}
+						{#if !loading}{cohorts[l]} advertising{:else}{l * 2} hex{/if}
 					</span>
 				</button>
 			{/each}
@@ -258,9 +265,29 @@
 		</div>
 		<div class="text-fg-faint mb-3 text-xs">
 			These nodes are indistinguishable <em>from each other in the path of a {byteLen}-byte
-			packet</em> — they are not misconfigured, and their own adverts may well be unambiguous. Any
-			routing node can appear in a {byteLen}-byte path, because a relay writes its prefix at the
-			width the <span class="text-fg-dim">sender</span> chose, not its own.
+			packet</em>, and their own adverts may well be unambiguous. Any routing node can appear in a
+			{byteLen}-byte path, because a relay writes its prefix at the width the
+			<span class="text-fg-dim">sender</span> chose, not its own.
+			<!-- Not a blanket "they are not misconfigured": a node that advertises at the
+			     selected width originates narrow paths itself, so its operator does have a
+			     change to make. That was fixed in the callout below in v0.7.4 and missed
+			     here — 12 of the 108 nodes listed at 1 byte are in that position. -->
+			{#if groups.length}
+				{#if selfNarrow.length}
+					So most of them are not misconfigured — but {selfNarrow.length === 1
+						? 'one'
+						: selfNarrow.length}
+					<span class="text-fg-dim"
+						>{selfNarrow.length === 1 ? 'does' : 'do'} advertise at {byteLen} byte{byteLen > 1
+							? 's'
+							: ''}</span
+					>, so {selfNarrow.length === 1 ? 'that operator has' : 'those operators have'} a change to
+					make; see below.
+				{:else}
+					None of them are misconfigured: every one already advertises wider than {byteLen}
+					byte{byteLen > 1 ? 's' : ''}.
+				{/if}
+			{/if}
 			{#if observedShare !== null}
 				<span class="text-fg-dim"
 					>Over the last 24h, <span class="tnum">{observedShare.toFixed(1)}%</span> of observed

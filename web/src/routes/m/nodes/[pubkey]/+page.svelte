@@ -204,7 +204,9 @@
 					{#if hashId.artifactOf}
 						<span class="text-coral bg-coral/10 rounded px-1.5 py-0.5 font-mono text-[0.6rem]">corrupted copy</span>
 					{:else if hashId.shared === 0}
-						<span class="text-signal bg-signal/10 rounded px-1.5 py-0.5 font-mono text-[0.6rem]">unique</span>
+						<!-- Scoped to this node's own width: a narrower sender exposes it at
+						     that width, where it may not be unique. -->
+						<span class="text-signal bg-signal/10 rounded px-1.5 py-0.5 font-mono text-[0.6rem]">unique at {hashId.bytes} byte{hashId.bytes > 1 ? 's' : ''}</span>
 					{:else}
 						<a
 							href="/m/identity?len={hashId.bytes}&id={hashId.hex}"

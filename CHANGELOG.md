@@ -4,6 +4,38 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.6] — 2026-08-13
+
+### Fixed
+Five more places where a fact was attributed to the wrong node — the same class
+of error as v0.9.5, found by re-reading the identity page and the node panel
+that links into it with "whose setting is this?" in mind.
+
+- **"In use by another *N*-byte node" named a width the occupier may not use —
+  and then named nobody.** Whether a hash ID is taken is correctly judged over
+  every routing node, but the occupant list was filtered to nodes whose own
+  adverts use the selected width, so the "Used by …" line usually had nothing to
+  show: on the mesh this was measured against, 180 of 197 occupied 2-byte
+  prefixes reported "in use" with no name attached. The status now reads "In use
+  by another routing node" and always names the holder.
+- **A node could be marked "unique" while being ambiguous in a narrower path.**
+  Uniqueness is only ever measured at the node's own advertised width, but the
+  badge claimed it flatly — and 96 of 197 routing nodes were unique at their own
+  width and ambiguous in a 1-byte path, a width carrying 15.8% of recent
+  traffic. The badge now reads "unique at 3 bytes" and says in a tooltip what a
+  narrower sender does to that claim.
+- **A collision tooltip called the other nodes "*N*-byte nodes".** They share the
+  prefix at the width being examined, whatever their own adverts use.
+- **The collision panel exonerated every node it listed.** It said the listed
+  nodes "are not misconfigured", contradicting the callout directly below it,
+  which correctly points out that a node advertising at the selected width
+  originates narrow paths itself and its operator can fix that. The intro now
+  agrees with the callout.
+- **The width buttons counted adverts but read as "nodes affected".** Each button
+  showed "*N* nodes" from the advert cohort, on a control that selects a packet
+  width — the same conflation the v0.9.5 copy fix was about. They now say "N
+  advertising".
+
 ## [v0.9.5] — 2026-08-13
 
 ### Fixed
