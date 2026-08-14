@@ -8,6 +8,7 @@
 	import { ago } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
+	import Linkify from '$lib/components/Linkify.svelte';
 
 	// How far back the reader pulls history (server caps channel history at 24h).
 	const HISTORY_SEC = 86400;
@@ -379,7 +380,8 @@
 									<Tooltip text={clockTime(m.receivedAt)}><span class="text-fg-faint font-mono text-[0.62rem]">{ago(m.receivedAt)} ago</span></Tooltip>
 									{#if m.observers > 1}<span class="text-fg-faint ml-auto font-mono text-[0.62rem]">heard ×{m.observers}</span>{/if}
 								</div>
-								<div class="text-fg text-sm break-words whitespace-pre-wrap">{m.text}</div>
+								<!-- whitespace-pre-wrap: keep Linkify tight against the tags -->
+								<div class="text-fg text-sm break-words whitespace-pre-wrap"><Linkify text={m.text} /></div>
 							</div>
 						{/each}
 					{/if}

@@ -6,6 +6,7 @@
 	import { live } from '$lib/live.svelte';
 	import { api, type LiveEvent } from '$lib/api';
 	import { ago } from '$lib/format';
+	import Linkify from '$lib/components/Linkify.svelte';
 
 	const HISTORY_SEC = 86400;
 	let history = $state<LiveEvent[]>([]);
@@ -192,7 +193,7 @@
 							<span class="text-fg-faint font-mono text-[0.6rem]">{ago(m.receivedAt)} ago</span>
 							{#if m.observers > 1}<span class="text-fg-faint ml-auto font-mono text-[0.6rem]">×{m.observers}</span>{/if}
 						</div>
-						<div class="text-fg text-sm break-words whitespace-pre-wrap">{m.text}</div>
+						<div class="text-fg text-sm break-words whitespace-pre-wrap"><Linkify text={m.text} /></div>
 					</div>
 				{/each}
 			{/if}

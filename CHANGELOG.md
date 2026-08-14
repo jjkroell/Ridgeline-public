@@ -4,6 +4,18 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.4] — 2026-08-13
+
+### Added
+- **Links in channel messages are now clickable.** A URL posted to a channel
+  renders as a link on both the desktop and mobile readers, opening in a new
+  tab. `http://`, `https://` and bare `www.` addresses are recognised; trailing
+  sentence punctuation stays out of the link, and a closing bracket is kept
+  only when the URL opened it, so both `…/Foo_(bar)` and `(see https://x.com)`
+  come out right. Message text is decrypted from the air and is untrusted, so
+  it is still rendered as text — the links are built as elements, never by
+  injecting HTML, and only http(s) addresses can become one.
+
 ## [v0.9.3] — 2026-08-13
 
 ### Changed
