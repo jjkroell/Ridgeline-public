@@ -4,6 +4,28 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.7] — 2026-08-16
+
+### Fixed
+- **Nodes in a remote part of the mesh could vanish from every map.** The
+  corrupt-GPS detector tested latitude and longitude independently against the
+  3×IQR whiskers of every located node. If your mesh has one dense cluster and a
+  smaller group some distance away, that spread is small enough that the remote
+  group fails both axes at once and is dropped from the static map, the live
+  map, the node-detail inset and the dashboard mini-map — silently, because
+  those views hide suspect nodes rather than marking them. Coordinates are now
+  judged on distance from the mesh centroid, a single measurement, so a node
+  that is moderately north *and* moderately west of the main cluster no longer
+  fails twice over; and a node within 500 km of the centroid is never flagged,
+  however tightly the rest of the mesh is clustered. Genuinely distant outliers
+  are still caught.
+- **Null island is now detected as the error it is.** A node that has never had a
+  GPS fix reports 0,0. Those were only being caught incidentally by the same
+  statistical test, and they skewed it: they dragged both the centre and the
+  spread, so whether a real remote node was visible depended on how many nodes
+  with broken GPS happened to be on air. 0,0 and out-of-range coordinates are
+  now rejected directly and excluded from the statistics.
+
 ## [v0.9.6] — 2026-08-13
 
 ### Fixed

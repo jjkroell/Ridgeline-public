@@ -27,7 +27,14 @@ export const ROLE_HEX: Record<string, string> = {
 /** Amber ring drawn around favourited nodes on the maps. */
 export const FAV_COLOR = '#e8b454';
 
-/** Nodes with valid, non-suspect coordinates — the set safe to plot. */
+/**
+ * Nodes with valid, non-suspect coordinates — the set safe to plot.
+ *
+ * The 0,0 check mirrors the server's validCoords: null island is what a node
+ * that has never had a fix reports, and it must never plot as a real position.
+ * The server already flags those gpsSuspect; this keeps the rule true here too,
+ * independently of how a caller sourced its nodes.
+ */
 export function locatedNodes(nodes: Node[]): Node[] {
 	return nodes.filter(
 		(n) =>
@@ -35,6 +42,7 @@ export function locatedNodes(nodes: Node[]): Node[] {
 			!n.gpsSuspect &&
 			n.latitude != null &&
 			n.longitude != null &&
+			!(n.latitude === 0 && n.longitude === 0) &&
 			Math.abs(n.latitude) <= 90 &&
 			Math.abs(n.longitude) <= 180
 	);

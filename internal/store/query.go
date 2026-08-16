@@ -33,47 +33,105 @@ type Node struct {
 	// retired nodes — they remain subject to retention and still resolve as relay
 	// hops — so the public API filters them out at its own boundary.
 	RetiredAt string `json:"retiredAt,omitempty"`
-	// GpsSuspect marks a located node whose coordinates are a statistical
-	// outlier versus the rest of the mesh — likely corrupt GPS.
+	// GpsSuspect marks a located node whose coordinates can't be plotted: either
+	// structurally invalid (null island, out of range) or implausibly far from
+	// the rest of the mesh. See flagGpsOutliers.
 	GpsSuspect bool `json:"gpsSuspect"`
 	// Radio is the node's "freq,bw,sf,cr" config, inherited from the observer
 	// that heard it (nodes don't broadcast their own). Empty until known.
 	Radio string `json:"radio,omitempty"`
 }
 
-// flagGpsOutliers marks located nodes whose latitude or longitude falls beyond
-// the 3×IQR far-outlier whiskers of the located population.
+// gpsFloorKm is the radius around the mesh centroid inside which a node is
+// NEVER flagged as an outlier, however tightly the rest of the population is
+// clustered. A mesh with one dense metro cluster produces a very small spread,
+// and a real regional group sitting outside it is not corrupt GPS — it is
+// coverage. Without this floor the north-island group (~330 km out) was being
+// hidden from every map by a whisker it missed by under a kilometre.
+const gpsFloorKm = 500
+
+// validCoords reports whether a node carries coordinates worth plotting at all.
+// Null island is the common corrupt-GPS value — a node that has never had a fix
+// reports 0,0 — and it is a structural error, not a statistical one, so it is
+// tested directly rather than left to the outlier maths to catch by luck.
+func validCoords(lat, lon float64) bool {
+	if lat == 0 && lon == 0 {
+		return false
+	}
+	return math.Abs(lat) <= 90 && math.Abs(lon) <= 180
+}
+
+// flagGpsOutliers marks located nodes whose coordinates can't be trusted. Two
+// separate tests: structurally invalid coordinates always fail, and valid ones
+// fail only when they sit both beyond gpsFloorKm and beyond the 3×IQR whisker
+// of the population's distances from the mesh centroid.
+//
+// Distance from a median centroid is one number, so a node that is moderately
+// north AND moderately west no longer compounds two independent axis tests into
+// a rejection. Invalid coordinates are excluded from the centroid and the
+// whisker — 0,0 rows would otherwise drag both, and the flagging of real nodes
+// would depend on how many broken ones happened to be on air.
 func flagGpsOutliers(nodes []Node) {
 	var lats, lons []float64
-	for i := range nodes {
-		if nodes[i].Latitude != nil && nodes[i].Longitude != nil {
-			lats = append(lats, *nodes[i].Latitude)
-			lons = append(lons, *nodes[i].Longitude)
-		}
-	}
-	if len(lats) < 8 {
-		return // too few to judge an outlier
-	}
-	latLo, latHi := iqrWhiskers(lats)
-	lonLo, lonHi := iqrWhiskers(lons)
 	for i := range nodes {
 		if nodes[i].Latitude == nil || nodes[i].Longitude == nil {
 			continue
 		}
 		lat, lon := *nodes[i].Latitude, *nodes[i].Longitude
-		if lat < latLo || lat > latHi || lon < lonLo || lon > lonHi {
+		if !validCoords(lat, lon) {
+			nodes[i].GpsSuspect = true
+			continue
+		}
+		lats = append(lats, lat)
+		lons = append(lons, lon)
+	}
+	if len(lats) < 8 {
+		return // too few to judge a distance outlier
+	}
+	cLat, cLon := median(lats), median(lons)
+
+	dists := make([]float64, 0, len(lats))
+	for i := range lats {
+		dists = append(dists, haversineKm(cLat, cLon, lats[i], lons[i]))
+	}
+	limit := math.Max(gpsFloorKm, iqrUpperWhisker(dists))
+
+	for i := range nodes {
+		if nodes[i].Latitude == nil || nodes[i].Longitude == nil || nodes[i].GpsSuspect {
+			continue
+		}
+		if haversineKm(cLat, cLon, *nodes[i].Latitude, *nodes[i].Longitude) > limit {
 			nodes[i].GpsSuspect = true
 		}
 	}
 }
 
-func iqrWhiskers(v []float64) (lo, hi float64) {
+// median of v (v is not modified). The centroid is a median rather than a mean
+// so a handful of wild coordinates can't drag the centre out to sea.
+func median(v []float64) float64 {
+	s := append([]float64(nil), v...)
+	sort.Float64s(s)
+	return s[int(math.Round(float64(len(s)-1)*0.5))]
+}
+
+func iqrUpperWhisker(v []float64) float64 {
 	s := append([]float64(nil), v...)
 	sort.Float64s(s)
 	q := func(p float64) float64 { return s[int(math.Round(float64(len(s)-1)*p))] }
 	q1, q3 := q(0.25), q(0.75)
-	iqr := q3 - q1
-	return q1 - 3*iqr, q3 + 3*iqr
+	return q3 + 3*(q3-q1)
+}
+
+const earthRadiusKm = 6371
+
+// haversineKm is the great-circle distance between two points in kilometres.
+func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
+	rad := math.Pi / 180
+	dLat := (lat2 - lat1) * rad
+	dLon := (lon2 - lon1) * rad
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*rad)*math.Cos(lat2*rad)*math.Sin(dLon/2)*math.Sin(dLon/2)
+	return 2 * earthRadiusKm * math.Asin(math.Min(1, math.Sqrt(a)))
 }
 
 // Stats is a high-level snapshot of the database.
