@@ -248,6 +248,15 @@ type Store struct {
 	allowedNodes     map[string]bool // node pubkey (UPPER) — dismissed detection candidates
 	knownBridges     map[string]bool // node pubkey (UPPER) — sanctioned bridges, labelled not hidden
 
+	// Standby cache, consulted on the hot ingest path alongside the blocklist.
+	// standbyDropped counts packets discarded per observer since this process
+	// started; it is in memory because a per-packet DB write would cost more than
+	// storing the packet. See observer_standby.go.
+	standbyMu        sync.RWMutex
+	standbyObservers map[string]bool       // observer id (exact)
+	standbyDropped   map[string]int64      // observer id -> packets discarded
+	standbySeen      map[string]time.Time  // observer id -> last last_seen refresh
+
 	// Set of node pubkeys (UPPER) with an open pending ownership claim. Consulted
 	// on the hot ingest path so the advert verifier only touches the DB for nodes
 	// that actually have a claim awaiting a code. Refreshed on claim mutations.
@@ -314,6 +323,13 @@ func Open(path string) (*Store, error) {
 	// part of the network while its history stays attributable to it. NULL means
 	// active; a retirement stamps the RFC3339 time it was retired.
 	db.Exec(`ALTER TABLE observers ADD COLUMN retired_at TEXT`)
+	// Standby suspends INGEST for an observer while leaving it connected and
+	// visible: its /status keeps flowing (so it still reports online with live
+	// telemetry) and every packet it publishes is discarded. NULL means in
+	// service; a stand-down stamps the RFC3339 time it began. Like retired_at,
+	// the status upsert never touches this column, so a retained /status replay
+	// cannot return an observer to service behind the operator's back.
+	db.Exec(`ALTER TABLE observers ADD COLUMN standby_since TEXT`)
 	// User account status columns (added after the initial users table shipped).
 	db.Exec(`ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE users ADD COLUMN protected INTEGER NOT NULL DEFAULT 0`)
@@ -350,6 +366,10 @@ func Open(path string) (*Store, error) {
 	if err := s.loadBlocklist(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("store: load blocklist: %w", err)
+	}
+	if err := s.loadStandby(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: load standby: %w", err)
 	}
 	if err := s.loadPendingClaims(); err != nil {
 		db.Close()
@@ -516,11 +536,17 @@ func (s *Store) UpdateObserverStatusIfPresent(id, name, region, pubkey, statusJS
 // Retired observers are skipped: their row is deliberately kept so replayed
 // retained status messages can't re-INSERT them (see RetireObserver), and
 // sweeping it away would undo the retirement.
+//
+// Observers on STANDBY are skipped for the same reason. RecordStandbyDrop keeps
+// their last_seen current while they are still being heard, so a live one never
+// reaches the cutoff anyway — but one that goes off the air DURING a stand-down
+// would, and deleting the row would silently discard the operator's stand-down
+// along with it. A held row is held.
 func (s *Store) DeleteStaleObservers(cutoff string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT id FROM observers WHERE last_seen < ? AND retired_at IS NULL`, cutoff)
+	rows, err := s.db.Query(`SELECT id FROM observers WHERE last_seen < ? AND retired_at IS NULL AND standby_since IS NULL`, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -540,7 +566,7 @@ func (s *Store) DeleteStaleObservers(cutoff string) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	if _, err := s.db.Exec(`DELETE FROM observers WHERE last_seen < ? AND retired_at IS NULL`, cutoff); err != nil {
+	if _, err := s.db.Exec(`DELETE FROM observers WHERE last_seen < ? AND retired_at IS NULL AND standby_since IS NULL`, cutoff); err != nil {
 		return nil, err
 	}
 	return ids, nil

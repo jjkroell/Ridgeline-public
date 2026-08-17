@@ -5,6 +5,7 @@
 	import { ago, fmtNum, skewColor, fmtSkew, isFresh } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
+	import StandbyBadge from '$lib/components/StandbyBadge.svelte';
 
 	let observers = $state<Observer[]>([]);
 	let coverage = $state<Record<string, ObserverCoverage>>({});
@@ -61,9 +62,15 @@
 								<div class="label mt-1">{o.region}</div>
 							{/if}
 						</div>
-						<span class="label shrink-0 {isFresh(o.lastSeen) ? '!text-signal' : '!text-fg-faint'}">
-							{isFresh(o.lastSeen) ? 'Reporting' : 'Silent'}
-						</span>
+						<!-- On standby the Reporting/Silent label is misleading: the receiver
+						     IS still reporting, we are just discarding it. Say Standby instead. -->
+						{#if o.standbySince}
+							<StandbyBadge observer={o} compact />
+						{:else}
+							<span class="label shrink-0 {isFresh(o.lastSeen) ? '!text-signal' : '!text-fg-faint'}">
+								{isFresh(o.lastSeen) ? 'Reporting' : 'Silent'}
+							</span>
+						{/if}
 					</div>
 					<div class="border-line/60 mt-4 flex items-end justify-between border-t pt-3">
 						<div>

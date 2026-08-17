@@ -188,6 +188,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/observers/retired", s.requireAdminUser(s.adminRetiredObservers))
 	mux.HandleFunc("POST /api/admin/observers/retire", s.requireAdminUser(s.adminRetireObserver))
 	mux.HandleFunc("POST /api/admin/observers/unretire", s.requireAdminUser(s.adminUnretireObserver))
+	mux.HandleFunc("POST /api/admin/observers/standby", s.requireAdminUser(s.adminStandbyObserver))
+	mux.HandleFunc("POST /api/admin/observers/resume", s.requireAdminUser(s.adminResumeObserver))
 
 	if s.webDir != "" {
 		if info, err := os.Stat(s.webDir); err == nil && info.IsDir() {

@@ -217,6 +217,13 @@ type Observer struct {
 	LastStatusAt string          `json:"lastStatusAt,omitempty"`
 	// RetiredAt is set on decommissioned observers, which ListObservers omits.
 	RetiredAt string `json:"retiredAt,omitempty"`
+	// StandbySince is set while an observer is connected but having its packets
+	// discarded at ingest. Unlike RetiredAt this does NOT hide the observer —
+	// staying visible is the point, so the operator can see the stand-down.
+	StandbySince string `json:"standbySince,omitempty"`
+	// StandbyDropped counts packets discarded since this daemon started (see
+	// Store.StandbyDropped). Only meaningful while StandbySince is set.
+	StandbyDropped int64 `json:"standbyDropped,omitempty"`
 }
 
 // ObserverStatus is an observer's latest self-reported device telemetry, parsed
@@ -258,7 +265,8 @@ func (s *Store) listObservers(where string) ([]Observer, error) {
 	rows, err := s.db.Query(`
 		SELECT o.id, COALESCE(o.name,''), COALESCE(o.region,''), COALESCE(o.pubkey,''),
 		       n.latitude, n.longitude, o.first_seen, o.last_seen, o.packet_count,
-		       o.status_json, COALESCE(o.last_status_at,''), COALESCE(o.retired_at,'')
+		       o.status_json, COALESCE(o.last_status_at,''), COALESCE(o.retired_at,''),
+		       COALESCE(o.standby_since,'')
 		FROM observers o
 		LEFT JOIN nodes n ON n.pubkey = o.pubkey
 		WHERE ` + where + `
@@ -274,7 +282,7 @@ func (s *Store) listObservers(where string) ([]Observer, error) {
 		var statusJSON *string
 		if err := rows.Scan(&o.ID, &o.Name, &o.Region, &o.PublicKey,
 			&o.Latitude, &o.Longitude, &o.FirstSeen, &o.LastSeen, &o.PacketCount,
-			&statusJSON, &o.LastStatusAt, &o.RetiredAt); err != nil {
+			&statusJSON, &o.LastStatusAt, &o.RetiredAt, &o.StandbySince); err != nil {
 			return nil, err
 		}
 		if statusJSON != nil && *statusJSON != "" {
@@ -285,7 +293,17 @@ func (s *Store) listObservers(where string) ([]Observer, error) {
 		}
 		out = append(out, o)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Discard counts live in memory, so they are joined in after the query.
+	dropped := s.StandbyDropped()
+	for i := range out {
+		if out[i].StandbySince != "" {
+			out[i].StandbyDropped = dropped[out[i].ID]
+		}
+	}
+	return out, nil
 }
 
 // RecentObservation is a lightweight view of a recent packet sighting.

@@ -232,6 +232,51 @@ func (s *Server) setObserverRetired(w http.ResponseWriter, r *http.Request, reti
 	writeJSON(w, map[string]any{"observer": req.Observer, "retired": retire})
 }
 
+// adminStandbyObserver stands an observer down: it stays connected and visible,
+// and every packet it publishes is discarded at ingest until it is returned to
+// service. The middle ground between blocking a rogue publisher (permanent, and
+// says the publisher is hostile) and retiring a receiver (hides it, but keeps
+// ingesting everything it reports).
+//
+// Nothing already stored is affected, and nothing discarded during the
+// stand-down is recoverable — that is what makes it useful for a receiver being
+// moved, bench-tested, or run on a firmware build under suspicion.
+func (s *Server) adminStandbyObserver(w http.ResponseWriter, r *http.Request, _ store.User) {
+	s.setObserverStandby(w, r, true)
+}
+
+// adminResumeObserver returns an observer to service; ingest resumes on its
+// next packet.
+func (s *Server) adminResumeObserver(w http.ResponseWriter, r *http.Request, _ store.User) {
+	s.setObserverStandby(w, r, false)
+}
+
+func (s *Server) setObserverStandby(w http.ResponseWriter, r *http.Request, standby bool) {
+	var req struct {
+		Observer string `json:"observer"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request body")
+		return
+	}
+	if strings.TrimSpace(req.Observer) == "" {
+		writeErr(w, http.StatusBadRequest, "observer required")
+		return
+	}
+	var err error
+	if standby {
+		err = s.store.SetObserverStandby(req.Observer, store.NowRFC3339())
+	} else {
+		err = s.store.ClearObserverStandby(req.Observer)
+	}
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.log.Info("admin observer standby", "observer", req.Observer, "standby", standby)
+	writeJSON(w, map[string]any{"observer": req.Observer, "standby": standby})
+}
+
 func validKind(k string) bool {
 	return k == "observer" || k == "bridge" || k == "node" || k == "allow" || k == store.BlockKnown
 }

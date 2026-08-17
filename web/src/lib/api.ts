@@ -83,6 +83,13 @@ export interface Observer {
 	/** Set once retired (decommissioned). Retired observers are omitted from the
 	 *  observers list; their packets stay attributed to them. */
 	retiredAt?: string;
+	/** Set while the observer is on standby: still connected and still listed,
+	 *  but every packet it publishes is discarded at ingest. Unlike retiredAt this
+	 *  does NOT hide it — being able to see the stand-down is the point. */
+	standbySince?: string;
+	/** Packets discarded during the current stand-down, since the daemon last
+	 *  started. A live signal that standby is working, not an audited total. */
+	standbyDropped?: number;
 }
 
 export interface Observation {
@@ -528,7 +535,19 @@ export const admin = {
 			'POST',
 			csrf,
 			{ observer }
-		)
+		),
+	/** Stand an observer down: it stays connected and listed, and every packet it
+	 *  publishes is discarded at ingest until it is returned to service. Nothing
+	 *  already stored changes, and nothing discarded meanwhile is recoverable. */
+	standbyObserver: (csrf: string, observer: string) =>
+		mutate<{ observer: string; standby: boolean }>('/api/admin/observers/standby', 'POST', csrf, {
+			observer
+		}),
+	/** Return an observer to service; ingest resumes on its next packet. */
+	resumeObserver: (csrf: string, observer: string) =>
+		mutate<{ observer: string; standby: boolean }>('/api/admin/observers/resume', 'POST', csrf, {
+			observer
+		})
 };
 
 export const api = {

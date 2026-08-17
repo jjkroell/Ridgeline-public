@@ -13,6 +13,8 @@
 	import KpiStrip from '$lib/components/KpiStrip.svelte';
 	import WindowToggle from '$lib/components/WindowToggle.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import StandbyBadge from '$lib/components/StandbyBadge.svelte';
+	import StandbyControl from '$lib/components/StandbyControl.svelte';
 
 	const id = $derived(page.params.id ?? '');
 
@@ -203,7 +205,9 @@
 				<span class="h-2 w-2 rounded-full" style="background:{isFresh(observer.lastSeen) ? 'var(--color-signal)' : 'var(--color-fg-faint)'}"></span>
 			</Tooltip>
 		{/if}
+		<StandbyBadge {observer} compact />
 		<WindowToggle options={windows} bind:value={windowSec} />
+		<StandbyControl {observer} {id} disabled={retiring || deleting} onchange={refresh} />
 		{#if auth.isAdmin}
 			<Tooltip text="Withdraw this observer from the observers page but keep every packet it reported. Reversible.">
 				<button
@@ -236,6 +240,27 @@
 		     identity and is still worth having to hand (it's what the observer's
 		     MQTT topic is keyed by), so keep it visible but quiet. -->
 		<div class="text-fg-faint mb-4 font-mono text-[0.68rem] break-all">{observer.publicKey || observer.id}</div>
+
+		<!-- A stand-down is silent by nature — the receiver still looks healthy and
+		     still reports telemetry — so say plainly, above everything else, that the
+		     numbers below have stopped moving and why. -->
+		{#if observer.standbySince}
+			<div class="border-amber/40 bg-amber/5 mb-4 rounded-[var(--radius)] border px-5 py-3.5">
+				<div class="text-amber flex items-center gap-2 text-sm font-600">
+					<span class="bg-amber inline-block h-2 w-2 rounded-full"></span>
+					On standby since {ago(observer.standbySince)} ago
+				</div>
+				<div class="text-fg-dim mt-1.5 text-xs">
+					Still connected and reporting its own telemetry, but every packet it hears is
+					being discarded instead of stored.
+					{#if (observer.standbyDropped ?? 0) > 0}
+						<span class="tnum text-fg">{fmtNum(observer.standbyDropped ?? 0)}</span> discarded
+						since the daemon started.
+					{/if}
+					The counts below cover only what it reported before the stand-down.
+				</div>
+			</div>
+		{/if}
 
 		<!-- KPI strip -->
 		<KpiStrip items={kpis} />

@@ -170,6 +170,20 @@ func (in *Ingestor) handle(_ mqtt.Client, msg mqtt.Message) {
 		in.log.Debug("dropped blocklisted packet", "observer", observerID)
 		return
 	}
+	// Discard everything from an observer the operator has stood down. Checked
+	// AFTER the blocklist so a blocked publisher is still reported as blocked
+	// rather than as merely on standby, and BEFORE the store so a stand-down
+	// leaves no trace in the data — which is the whole point of it. The /status
+	// path is deliberately untouched: the receiver stays connected and keeps
+	// reporting telemetry while none of what it hears is kept.
+	if in.store.ObserverOnStandby(observerID) {
+		// Counts the discard and keeps last_seen current — we DID hear from the
+		// observer, we just aren't keeping what it said, and a frozen last_seen
+		// would make it read as silent and get swept by retention.
+		in.store.RecordStandbyDrop(observerID, time.Now().UTC().Format(time.RFC3339Nano))
+		in.log.Debug("discarded packet from observer on standby", "observer", observerID)
+		return
+	}
 
 	obs := store.Observation{
 		Packet:         packet,

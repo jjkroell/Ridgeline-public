@@ -4,6 +4,42 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.8] — 2026-08-16
+
+### Added
+- **Put an observer on standby.** A stood-down observer stays connected and stays
+  on the observers page, but every packet it publishes is discarded at ingest
+  instead of being stored. It is the reversible middle ground between the two
+  things that already existed — blocking a publisher (permanent, and says the
+  publisher is rogue) and retiring a receiver (hides it, but keeps ingesting
+  everything it reports). Intended for a receiver you don't want influencing the
+  data right now: one being moved or re-sited, sitting on the bench, or running a
+  firmware build you don't yet trust. Its `/status` messages are still processed
+  on purpose, so it keeps reporting online with live battery and noise telemetry
+  — you can watch the device while nothing it hears reaches the database. Admins
+  get a **Put on standby** / **Return to duty** control on the observer page
+  (desktop and mobile); the observer is badged amber wherever it appears, with a
+  banner on its page explaining that the statistics below have stopped moving and
+  how many packets have been discarded. Nothing already recorded is affected, and
+  nothing discarded during a stand-down is backfilled when it returns to service.
+  New endpoints: `POST /api/admin/observers/standby` and `.../resume`.
+
+### Changed
+- **The node-detail location map now uses the Hillshade basemap**, matching the
+  full maps' default, on the node modal, the desktop node page, the mobile node
+  page and the WebGL-free fallback. On a small locked thumbnail the terrain
+  shading is what carries the information — it's the difference between a dot on
+  a flat grey field and a dot visibly sitting on a ridge.
+
+### Fixed
+- **An observer on standby could be deleted by retention.** Packets are the only
+  thing that advances an observer's last-seen time, so standing one down made it
+  look silent within minutes, and the hourly sweep that removes genuinely dead
+  observers would delete the row an hour later — quietly taking the stand-down
+  with it. A discarded packet is still evidence the observer is alive, so it now
+  keeps the last-seen time current, and retention skips stood-down observers the
+  same way it already skips retired ones.
+
 ## [v0.9.7] — 2026-08-16
 
 ### Fixed

@@ -7,6 +7,7 @@
 	import QRCode from 'qrcode';
 	import { api, type Node, type NodeAnalytics, type NodeHistoryEntry, type NodeObserverStat, type NodeActivity, type BlockEntry } from '$lib/api';
 	import { basemapStyleUrl, collapseAttribution } from '$lib/map-basemap';
+	import { ensureHillshade } from '$lib/map-hillshade';
 	import { isLight } from '$lib/map-util';
 	import { hasWebGL } from '$lib/webgl';
 	import LeafletInset from './LeafletInset.svelte';
@@ -273,6 +274,13 @@
 			});
 			marker = new maplibregl.Marker({ color: '#34e3c4' }).setLngLat([lng, lat]).addTo(map);
 			const m = map;
+			// Terrain relief, matching the "Hillshade" default the full maps use — on
+			// a locked thumbnail the shading is what makes a ridge-top site read as a
+			// ridge-top site. Must be 'idle', NOT 'styledata': styledata fires mid-load
+			// with isStyleLoaded()===false, so ensureHillshade bails, and this map never
+			// swaps style afterwards so there is no later event to retry on. 'idle' is
+			// guaranteed once the style has settled (same reason /map uses it).
+			m.once('idle', () => ensureHillshade(m, light));
 			m.on('load', () => collapseAttribution(m));
 			setTimeout(() => m.resize(), 80);
 		});

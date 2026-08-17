@@ -5,6 +5,8 @@
 	import { api, type Observer, type ObserverAnalytics, type ObserverTelemetry, type ObserverStatus } from '$lib/api';
 	import { ago, fmtNum, skewColor, fmtSkew, snrColor, roleColor, roleLabel, isFresh } from '$lib/format';
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import StandbyBadge from '$lib/components/StandbyBadge.svelte';
+	import StandbyControl from '$lib/components/StandbyControl.svelte';
 
 	const id = $derived(page.params.id ?? '');
 	let windowSec = $state(86400);
@@ -94,10 +96,29 @@
 		<div class="mb-3 flex items-center gap-2.5">
 			<span class="h-2.5 w-2.5 rounded-full" style="background:{isFresh(observer.lastSeen) ? 'var(--color-signal)' : 'var(--color-fg-faint)'}"></span>
 			<h1 class="text-fg min-w-0 flex-1 truncate text-lg font-700">{observer.name ?? observer.id}</h1>
-			{#if observer.region}<span class="label">{observer.region}</span>{/if}
+			{#if observer.standbySince}
+				<StandbyBadge {observer} compact />
+			{:else if observer.region}<span class="label">{observer.region}</span>{/if}
 		</div>
 		<!-- Label above, actual identity here (the observer's MQTT topic key). -->
 		<div class="text-fg-faint mb-3 font-mono text-[0.62rem] break-all">{observer.publicKey || observer.id}</div>
+
+		<!-- A stand-down is silent by nature — the receiver still looks healthy — so
+		     say plainly that the numbers below have stopped moving, and why. -->
+		{#if observer.standbySince}
+			<div class="border-amber/40 bg-amber/5 mb-3 rounded-2xl border px-4 py-3">
+				<div class="text-amber text-sm font-600">On standby since {ago(observer.standbySince)} ago</div>
+				<div class="text-fg-dim mt-1 text-xs">
+					Connected and still reporting telemetry, but every packet it hears is discarded.
+					{#if (observer.standbyDropped ?? 0) > 0}
+						<span class="tnum text-fg">{fmtNum(observer.standbyDropped ?? 0)}</span> discarded since
+						the daemon started.
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		<div class="mb-3"><StandbyControl {observer} {id} onchange={refresh} /></div>
 
 		<!-- window -->
 		<div class="mb-3 flex gap-2">

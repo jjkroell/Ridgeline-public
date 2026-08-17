@@ -10,6 +10,7 @@
 	import { nodeHashId } from '$lib/hash-ids';
 	import { favorites } from '$lib/favorites.svelte';
 	import { basemapStyleUrl, collapseAttribution } from '$lib/map-basemap';
+	import { ensureHillshade } from '$lib/map-hillshade';
 	import { theme } from '$lib/theme.svelte';
 	import { hasWebGL } from '$lib/webgl';
 	import LeafletInset from '$lib/components/LeafletInset.svelte';
@@ -145,6 +146,12 @@
 		const light = theme.isLight;
 		map = new maplibregl.Map({ container: mapEl, style: basemapStyleUrl(light), center: [lng, lat], zoom: 11, attributionControl: { compact: true }, interactive: false });
 		marker = new maplibregl.Marker({ color: '#34e3c4' }).setLngLat([lng, lat]).addTo(map);
+		// Terrain relief, matching the desktop inset and the full maps' "Hillshade"
+		// default. Must be 'idle', NOT 'styledata': styledata fires mid-load with
+		// isStyleLoaded()===false so ensureHillshade bails, and this map never swaps
+		// style afterwards, so there is no later event to retry on.
+		const m = map;
+		m.once('idle', () => ensureHillshade(m, light));
 		map.on('load', () => { map?.resize(); if (map) collapseAttribution(map); });
 	});
 	$effect(() => {
