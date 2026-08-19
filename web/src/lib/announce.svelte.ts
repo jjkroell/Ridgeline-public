@@ -3,7 +3,7 @@
 // on demand from the overview page. Bump CURRENT when there's something new to
 // announce and every visitor sees it once again.
 const STORAGE_KEY = 'ridgeline-announce-seen';
-export const CURRENT = '2026-07-dashboard';
+export const CURRENT = '2026-08-second-frequency';
 
 class Announce {
 	open = $state(false);

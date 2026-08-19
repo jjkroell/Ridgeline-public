@@ -5,34 +5,24 @@
 	// Each entry is one new capability, in user-facing terms.
 	const items: { icon: string; title: string; body: string }[] = [
 		{
-			icon: 'M4 6h10M4 12h7M4 18h13M16 4v4M20 10v4M12 16v4',
-			title: 'Build your own dashboard',
-			body: 'The Overview is now yours to arrange — hit Customize to drag cards into any order, show or hide them, and add new ones like a mini map, claimed nodes, top relays, network activity and channels. Your layout is saved on your device.'
+			icon: 'M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M12 13a1 1 0 100-2 1 1 0 000 2z',
+			title: 'Nodes on another frequency are now marked',
+			body: 'If part of your mesh runs on a second frequency joined by a bridge, those nodes now show in a distinct colour with their frequency under the name, on the node list and every map. They are worked out from the traffic crossing the bridge — a receiver on one side cannot hear the other directly.'
 		},
 		{
-			icon: 'M4 6h16v12H4zM4 7l8 6 8-6',
-			title: 'Accounts with email verification',
-			body: 'Create an account, confirm your email, and sign in to unlock the features below.'
+			icon: 'M12 21s-7-6.2-7-11a7 7 0 1114 0c0 4.8-7 11-7 11z M12 10a2 2 0 100-4 2 2 0 000 4z',
+			title: 'Missing nodes are back on the maps',
+			body: 'Nodes in a distant part of a mesh could be dropped from every map by the check that filters out broken GPS: a tight cluster of nodes elsewhere made anything far away look like an error. Remote nodes now stay on the map, and genuinely bad coordinates are still caught.'
 		},
 		{
-			icon: 'M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3',
-			title: 'Claim your nodes — two ways',
-			body: 'Prove ownership by briefly renaming the node with a code, or instantly by signing with the node’s private key (it never leaves your browser).'
-		},
-		{
-			icon: 'M4 6h16v12H4zM4 7l8 6 8-6',
-			title: 'Get notified about your nodes',
-			body: 'When someone leaves a note on a node you own, we’ll email you so you never miss it.'
-		},
-		{
-			icon: 'M12 2v6m0 8v6M2 12h6m8 0h6M12 8a4 4 0 100 8 4 4 0 000-8z',
-			title: 'Manage your account',
-			body: 'Change your display name, email, and password anytime from your account page.'
+			icon: 'M3 20h18L14 7l-4 6-2-2z',
+			title: 'Node maps show the terrain',
+			body: 'The small location map on a node\'s page now uses the same shaded-relief basemap as the full maps, so you can see at a glance whether a node is sitting on a ridge or down in a valley.'
 		},
 		{
 			icon: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
-			title: 'New About page',
-			body: 'A quick primer on this MeshCore mesh network and how to get involved.'
+			title: 'Observers can be put on standby',
+			body: 'An observer on standby stays connected and listed, but every packet it reports is discarded instead of stored — for a receiver you are moving, bench-testing, or running firmware you do not yet trust.'
 		}
 	];
 </script>

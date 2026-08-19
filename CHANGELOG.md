@@ -4,6 +4,14 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.10.2] — 2026-08-19
+
+### Changed
+- **New what's-new announcement**, rewritten around what a visitor actually sees:
+  nodes on a second frequency marked in a distinct colour, remote nodes back on
+  the maps, terrain on the node location map, and observer standby. Every visitor
+  sees it once on their next load.
+
 ## [v0.10.1] — 2026-08-19
 
 ### Fixed
