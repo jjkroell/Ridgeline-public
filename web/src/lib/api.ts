@@ -98,6 +98,10 @@ export interface Observer {
 	/** Packets discarded during the current stand-down, since the daemon last
 	 *  started. A live signal that standby is working, not an audited total. */
 	standbyDropped?: number;
+	/** Last time this observer authenticated to the broker with a token signed by
+	 *  its own node key. Absent means it never has — i.e. it is still publishing
+	 *  to the anonymous broker and has yet to migrate. */
+	jwtAuthAt?: string;
 }
 
 export interface Observation {

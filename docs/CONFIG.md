@@ -43,6 +43,52 @@ reaching it through a reverse proxy.
 - `ABOUT.showRadio` + `RADIO_PARAMS` — the LoRa settings table (frequency,
   bandwidth, spreading factor, coding rate). Empty `RADIO_PARAMS` hides it.
 
+## "Add an observer" guide (`web/src/lib/site-content.ts`)
+
+The Observers page can carry a guide telling other people how to point a station
+at your mesh — flashing, radio settings, WiFi and the broker details, each with a
+copy button. It is **hidden entirely** until you set a broker, since without one
+there is nothing for a newcomer to connect to.
+
+- `MQTT.broker` — the URL observers connect to, with a scheme, e.g.
+  `wss://mqtt.example.com:443`. Empty hides the guide and its button.
+- `MQTT.audience` — the JWT audience if your broker uses Ed25519 observer tokens
+  (see below). It must equal the broker's hostname **exactly**, or tokens are
+  refused as having been minted for a different broker. Leave empty for a broker
+  using username/password.
+- `MQTT.defaultRegion` — the region code the guide suggests. Conventionally the
+  nearest airport's IATA code; it becomes the second segment of the observer's
+  MQTT topic (`meshcore/{REGION}/{PUBKEY}/packets`).
+- `MQTT.showIataPicker` — offers a searchable list of airports to pick that code
+  from. The bundled list is **Canada-only**, so this is off by default.
+- `RADIO_CLI` — the numeric `freq,bw,sf,cr` form of `RADIO_PARAMS`, pasted into
+  the guide's `set radio` command. Empty omits that step.
+
+## Observer authentication (Ed25519 tokens)
+
+Optionally, observers can authenticate instead of publishing anonymously. Each
+one signs a token with its own node key, so it can only publish under its own
+identity and nobody can report traffic as somebody else. There is no password to
+issue and nothing to register.
+
+`deploy/mosquitto-jwt.conf` and `deploy/mosquitto-jwt/` build a second broker that
+delegates every decision to ridgelined over the compose network. Run it **beside**
+your existing broker rather than replacing it, so stations can be moved one at a
+time — both feed the same database, and a half-migrated network is a normal state.
+
+- `mqttAuth.audience` in `deploy/config.json` — enables the `/api/mqtt-auth/*`
+  endpoints. Empty leaves them disabled (404).
+- `mqttAuth.consumerUsername` / `consumerPassword` — ridgelined's own login on the
+  authenticated broker, which allows anonymous connections from nobody. Must match
+  the matching entry in `extraBrokers`.
+- `extraBrokers[]` — additional brokers to ingest from alongside `mqtt`. An
+  observer must publish to exactly **one** of them; a station publishing to two is
+  counted twice.
+
+⚠ The auth endpoints must not be reachable from the internet — the bundled
+`Caddyfile` returns 404 for `/api/mqtt-auth/*` at the edge, and the broker reaches
+ridgelined over the compose network instead.
+
 ## Privacy & cookie consent
 
 The app ships a GDPR/PIPEDA cookie-consent banner and a `/privacy` page out of the

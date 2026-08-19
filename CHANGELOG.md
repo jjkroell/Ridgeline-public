@@ -4,6 +4,42 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.11.0] — 2026-08-19
+
+### Added
+- **Observers can authenticate.** MeshCore observer firmware can sign a token with
+  its own node key; Ridgeline now verifies it, so a station proves it owns the
+  public key it publishes under. Without this a broker accepts anyone who can
+  reach it, which means traffic can be injected under any observer's identity —
+  and since observers are keyed by public key, and the injection detection trusts
+  that identity, that is worth closing. Optional: the endpoints stay disabled
+  until you set `mqttAuth.audience`.
+- **A second, authenticated broker you can run beside the existing one**
+  (`deploy/mosquitto-jwt/`), rather than replacing it. Observers in the field are
+  serial-console devices that can only be moved one at a time, so both brokers
+  feed the same database and a half-migrated network is a normal state to sit in.
+- **Ingest from several brokers at once** (`extraBrokers`), which is what makes
+  the above possible. They start concurrently, so a broker that is slow to answer
+  no longer delays the HTTP server coming up.
+- **An "Add an observer" guide** on the Observers page — flashing, radio settings,
+  WiFi and your broker details, each with a copy button, plus a block with
+  everything for a fresh device. It covers the non-firmware routes too (a computer
+  reading a companion radio, OpenHop, the MeshCore Bot, Home Assistant), and the
+  meshcoretomqtt config alongside the firmware CLI. Driven entirely by
+  `site-content.ts` and **hidden until you configure a broker**, so it shows your
+  settings or nothing at all.
+- **An optional searchable airport picker** for the region code in that guide. The
+  bundled list is Canada-only, so it is off by default.
+- **A JWT AUTH flag on observer cards** marking stations that have moved to the
+  authenticated broker — its absence is the useful part while migrating.
+- **`Reply-To` support for outbound mail**, for when messages from an unattended
+  `noreply` address should still be answerable.
+
+### Changed
+- Modals can hold a fixed height, so a list that shrinks as you filter it no
+  longer makes the panel jump; and a stacked modal takes Escape on its own
+  instead of closing the whole stack.
+
 ## [v0.10.2] — 2026-08-19
 
 ### Changed

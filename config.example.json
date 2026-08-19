@@ -7,5 +7,18 @@
     "username": "",
     "password": "",
     "topics": ["meshcore/+/+/packets", "meshcore/+/+/status"]
+  },
+  "extraBrokers": [
+    {
+      "broker": "tcp://mosquitto-jwt:1883",
+      "clientID": "ridgelined-jwt",
+      "username": "ridgelined",
+      "password": "CHANGE_ME_consumer_secret"
+    }
+  ],
+  "mqttAuth": {
+    "audience": "mqtt.example.com",
+    "consumerUsername": "ridgelined",
+    "consumerPassword": "CHANGE_ME_consumer_secret"
   }
 }

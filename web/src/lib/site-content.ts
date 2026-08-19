@@ -22,6 +22,37 @@ export const RADIO_PARAMS: RadioParam[] = [
 	{ k: 'Coding rate', v: 'CR 5' }
 ];
 
+/** The `set radio` argument for MeshCore's CLI — freq,bw,sf,cr — matching
+ *  RADIO_PARAMS above. Shown in the "Add an observer" guide so an operator can
+ *  paste it straight into a new node. Empty omits that step. */
+export const RADIO_CLI = '915.0,62.5,7,5';
+
+/** Where observers publish, and how they authenticate. Used only by the
+ *  "Add an observer" guide on the Observers page. */
+export interface MqttConfig {
+	/** Full URL with a scheme, e.g. wss://mqtt.example.com:443. When EMPTY the
+	 *  guide and its button are hidden entirely — set it once you have a broker
+	 *  observers other than you will connect to. */
+	broker: string;
+	/** JWT audience for Ed25519 observer auth — normally the broker's hostname,
+	 *  and it must match exactly or tokens are refused as minted for another
+	 *  broker. Empty means the broker uses username/password instead. */
+	audience: string;
+	/** Region code suggested in the guide. Conventionally the nearest airport's
+	 *  IATA code; it becomes the second segment of the observer's MQTT topic. */
+	defaultRegion: string;
+	/** Offer the searchable Canadian airport picker. Off by default because the
+	 *  list is Canada-only — turn it on if that suits your mesh. */
+	showIataPicker: boolean;
+}
+
+export const MQTT: MqttConfig = {
+	broker: '',
+	audience: '',
+	defaultRegion: 'AAA',
+	showIataPicker: false
+};
+
 /** One heading + body block on the About page. Each string in `paragraphs` is a
  *  paragraph; keep them plain text (they're rendered as-is, not HTML). */
 export interface AboutSection {

@@ -281,6 +281,10 @@ type Observer struct {
 	// discarded at ingest. It does NOT hide the observer — staying visible is the
 	// point, so the operator can see the stand-down.
 	StandbySince string `json:"standbySince,omitempty"`
+	// JWTAuthAt is the last time this observer authenticated to the broker with a
+	// token signed by its own node key. Empty means it never has — i.e. it is
+	// still publishing to the anonymous broker.
+	JWTAuthAt string `json:"jwtAuthAt,omitempty"`
 	// StandbyDropped counts packets discarded since this daemon started (see
 	// Store.StandbyDropped). Only meaningful while StandbySince is set.
 	StandbyDropped int64 `json:"standbyDropped,omitempty"`
@@ -323,7 +327,7 @@ func (s *Store) listObservers() ([]Observer, error) {
 		SELECT o.id, COALESCE(o.name,''), COALESCE(o.region,''), COALESCE(o.pubkey,''),
 		       n.latitude, n.longitude, o.first_seen, o.last_seen, o.packet_count,
 		       o.status_json, COALESCE(o.last_status_at,''),
-		       COALESCE(o.standby_since,'')
+		       COALESCE(o.standby_since,''), COALESCE(o.jwt_auth_at,'')
 		FROM observers o
 		LEFT JOIN nodes n ON n.pubkey = o.pubkey
 		ORDER BY o.last_seen DESC`)
@@ -338,7 +342,7 @@ func (s *Store) listObservers() ([]Observer, error) {
 		var statusJSON *string
 		if err := rows.Scan(&o.ID, &o.Name, &o.Region, &o.PublicKey,
 			&o.Latitude, &o.Longitude, &o.FirstSeen, &o.LastSeen, &o.PacketCount,
-			&statusJSON, &o.LastStatusAt, &o.StandbySince); err != nil {
+			&statusJSON, &o.LastStatusAt, &o.StandbySince, &o.JWTAuthAt); err != nil {
 			return nil, err
 		}
 		if statusJSON != nil && *statusJSON != "" {

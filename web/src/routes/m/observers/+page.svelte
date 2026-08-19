@@ -4,8 +4,11 @@
 	import { api, type Observer } from '$lib/api';
 	import { ago, fmtNum, isFresh } from '$lib/format';
 	import StandbyBadge from '$lib/components/StandbyBadge.svelte';
+	import ObserverSetupModal from '$lib/components/ObserverSetupModal.svelte';
+	import { MQTT } from '$lib/site-content';
 
 	let observers = $state<Observer[]>([]);
+	let showSetup = $state(false);
 
 	async function refresh() {
 		try {
@@ -32,8 +35,21 @@
 
 <Seo title="Observers" description="Listening posts feeding this observatory." path="/m/observers" />
 
+{#if showSetup && MQTT.broker}
+	<ObserverSetupModal onclose={() => (showSetup = false)} />
+{/if}
+
 <div class="px-4 py-4">
-	<div class="text-fg-faint mb-2 px-1 font-mono text-[0.62rem]">{observers.length} listening posts</div>
+	<div class="mb-2 flex items-center gap-2 px-1">
+		<div class="text-fg-faint font-mono text-[0.62rem]">{observers.length} listening posts</div>
+		{#if MQTT.broker}
+		<button
+			onclick={() => (showSetup = true)}
+			class="border-signal/50 bg-signal/10 text-signal active:bg-signal/20 ml-auto rounded-full border px-3 py-1 font-mono text-[0.62rem]"
+			>Add an observer</button
+		>
+		{/if}
+	</div>
 	<div class="flex flex-col gap-3">
 		{#each observers as o (o.id)}
 			{@const reporting = isFresh(o.lastSeen)}
@@ -41,6 +57,9 @@
 				<div class="flex items-center gap-2.5">
 					<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{reporting ? 'var(--color-signal)' : 'var(--color-fg-faint)'}"></span>
 					<span class="text-fg min-w-0 flex-1 truncate text-sm font-600">{o.name ?? o.id}</span>
+					{#if o.jwtAuthAt}
+						<span class="text-lime shrink-0 font-mono text-[0.55rem] font-600 tracking-wider">JWT AUTH</span>
+					{/if}
 					{#if o.standbySince}
 						<StandbyBadge observer={o} compact />
 					{:else if o.region}<span class="label !text-[0.55rem] shrink-0">{o.region}</span>{/if}

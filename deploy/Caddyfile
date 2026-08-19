@@ -20,5 +20,16 @@
 		-Server
 	}
 
-	reverse_proxy ridgelined:8080
+	# The observer-auth endpoints are for the JWT broker only, which reaches
+	# ridgelined directly over the compose network and never through here.
+	# Exposing them publicly would hand out a token-validity oracle and put the
+	# ingest consumer's password behind an internet-facing check. handle blocks
+	# are mutually exclusive, so this wins over the catch-all below.
+	handle /api/mqtt-auth/* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy ridgelined:8080
+	}
 }

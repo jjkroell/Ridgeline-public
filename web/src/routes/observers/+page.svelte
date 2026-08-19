@@ -6,10 +6,13 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import StandbyBadge from '$lib/components/StandbyBadge.svelte';
+	import ObserverSetupModal from '$lib/components/ObserverSetupModal.svelte';
+	import { MQTT } from '$lib/site-content';
 
 	let observers = $state<Observer[]>([]);
 	let coverage = $state<Record<string, ObserverCoverage>>({});
 	let loading = $state(true);
+	let showSetup = $state(false);
 
 	async function refresh() {
 		try {
@@ -34,10 +37,24 @@
 />
 
 <PageHeader eyebrow="Listening Posts" title="Observers">
-	<div class="font-mono text-fg-dim text-xs">
-		<span class="text-signal tnum">{observers.length}</span> <span class="text-fg-faint">posts</span>
+	<div class="flex items-center gap-4">
+		{#if MQTT.broker}
+		<button
+			onclick={() => (showSetup = true)}
+			class="border-signal/50 bg-signal/10 text-signal hover:bg-signal/20 rounded-[var(--radius)] border px-3 py-1.5 text-xs font-600 transition-colors"
+			>Add an observer</button
+		>
+		{/if}
+		<div class="font-mono text-fg-dim text-xs">
+			<span class="text-signal tnum">{observers.length}</span>
+			<span class="text-fg-faint">posts</span>
+		</div>
 	</div>
 </PageHeader>
+
+{#if showSetup && MQTT.broker}
+	<ObserverSetupModal onclose={() => (showSetup = false)} />
+{/if}
 
 <div class="px-6 py-6 md:px-10">
 	{#if loading}
@@ -62,15 +79,26 @@
 								<div class="label mt-1">{o.region}</div>
 							{/if}
 						</div>
-						<!-- On standby the Reporting/Silent label is misleading: the receiver
-						     IS still reporting, we are just discarding it. Say Standby instead. -->
-						{#if o.standbySince}
-							<StandbyBadge observer={o} compact />
-						{:else}
-							<span class="label shrink-0 {isFresh(o.lastSeen) ? '!text-signal' : '!text-fg-faint'}">
-								{isFresh(o.lastSeen) ? 'Reporting' : 'Silent'}
-							</span>
-						{/if}
+						<!-- Right column: the card's state, stacked. On standby the
+						     Reporting/Silent label is misleading — the receiver IS still
+						     reporting, we are just discarding it — so say Standby instead. -->
+						<div class="flex shrink-0 flex-col items-end gap-1">
+							{#if o.standbySince}
+								<StandbyBadge observer={o} compact />
+							{:else}
+								<span class="label {isFresh(o.lastSeen) ? '!text-signal' : '!text-fg-faint'}">
+									{isFresh(o.lastSeen) ? 'Reporting' : 'Silent'}
+								</span>
+							{/if}
+							<!-- Marks an observer that has moved to the authenticated broker.
+							     Its absence is the useful signal during the migration: nothing
+							     here means still on the anonymous broker. -->
+							{#if o.jwtAuthAt}
+								<Tooltip text="Authenticated to the broker with its own node key — last {ago(o.jwtAuthAt)}">
+									<span class="text-lime font-mono text-[0.6rem] font-600 tracking-wider">JWT AUTH</span>
+								</Tooltip>
+							{/if}
+						</div>
 					</div>
 					<div class="border-line/60 mt-4 flex items-end justify-between border-t pt-3">
 						<div>

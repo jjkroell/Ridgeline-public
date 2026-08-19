@@ -202,6 +202,22 @@ else
 	SHOW_RADIO=false; RADIO_FREQ=""; RADIO_BW=""; RADIO_SF=""; RADIO_CR=""
 fi
 
+# The "Add an observer" guide on the Observers page. Only useful once other
+# people can publish to your broker, so it is off unless you give a URL.
+OBS_BROKER=""; OBS_AUDIENCE=""; OBS_REGION="AAA"; OBS_IATA_PICKER=false
+if yesno "Show a guide telling others how to add an observer to your mesh?" n; then
+	ask OBS_BROKER "  Broker URL observers connect to (e.g. wss://mqtt.example.com:443)" ""
+	echo "  Ed25519 token auth lets an observer prove it owns the key it publishes"
+	echo "  under. The audience must equal the broker hostname exactly."
+	if yesno "  Does your broker use Ed25519 token (JWT) auth?" n; then
+		ask OBS_AUDIENCE "    JWT audience (usually the broker hostname)" ""
+	fi
+	ask OBS_REGION "  Region code suggested in the guide (an airport IATA code)" "AAA"
+	if yesno "  Offer the searchable Canadian airport picker? (Canada-only list)" n; then
+		OBS_IATA_PICKER=true
+	fi
+fi
+
 # ===========================================================================
 # 6. Domain / TLS (Caddy)
 # ===========================================================================
@@ -267,6 +283,7 @@ echo; info "Writing configuration…"
 export SITE_NAME SITE_TAGLINE SITE_URL SITE_DESC PRIVACY_CONTACT MAP_LAT MAP_LON MAP_ZOOM \
 	ABOUT_MODE ABOUT_KICKER ABOUT_TITLE ABOUT_INTRO ABOUT_FOOTER SECTION_COUNT SHOW_RADIO \
 	RADIO_FREQ RADIO_BW RADIO_SF RADIO_CR \
+	OBS_BROKER OBS_AUDIENCE OBS_REGION OBS_IATA_PICKER \
 	MQTT_BROKER MQTT_CLIENTID MQTT_USER MQTT_PASS MQTT_TOPICS \
 	EMAIL_ENABLED EMAIL_HOST EMAIL_PORT EMAIL_USER EMAIL_PASS EMAIL_FROM EMAIL_FROMNAME EMAIL_BASEURL \
 	LISTEN_ADDR DB_PATH CADDY_ADDR ENVIRONMENT
@@ -298,12 +315,24 @@ open('web/.env', 'w').write('\n'.join(lines) + '\n')
 print('  web/.env')
 PY
 
-# 7b. Frontend content module (About page + radio table).
+# 7b. Frontend content module (About page + radio table + observer guide).
 python3 - <<'PY'
-import os, json
+import os, json, re
 name = os.environ['SITE_NAME']
 mode = os.environ['ABOUT_MODE']
 show_radio = os.environ['SHOW_RADIO'] == 'true'
+# Numeric-only form of the radio params for the observer guide's `set radio`.
+def _num(v):
+    m = re.search(r'[\d.]+', v or '')
+    return m.group(0) if m else ''
+_cli = [_num(os.environ.get(k, '')) for k in ('RADIO_FREQ', 'RADIO_BW', 'RADIO_SF', 'RADIO_CR')]
+radio_cli = ','.join(_cli) if all(_cli) else ''
+mqtt = {
+    'broker': os.environ.get('OBS_BROKER', ''),
+    'audience': os.environ.get('OBS_AUDIENCE', ''),
+    'defaultRegion': os.environ.get('OBS_REGION', '') or 'AAA',
+    'showIataPicker': os.environ.get('OBS_IATA_PICKER') == 'true',
+}
 
 radio = []
 for k, envk in (('Frequency','RADIO_FREQ'),('Bandwidth','RADIO_BW'),
@@ -366,6 +395,18 @@ export interface RadioParam {{
 }}
 
 export const RADIO_PARAMS: RadioParam[] = {j(radio)};
+
+/** The `set radio` argument for MeshCore's CLI — freq,bw,sf,cr. */
+export const RADIO_CLI = {j(radio_cli)};
+
+export interface MqttConfig {{
+	broker: string;
+	audience: string;
+	defaultRegion: string;
+	showIataPicker: boolean;
+}}
+
+export const MQTT: MqttConfig = {j(mqtt)};
 
 export interface AboutSection {{
 \theading: string;

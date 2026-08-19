@@ -73,3 +73,31 @@ func TestBuildMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestReplyToHeader(t *testing.T) {
+	base := config.Email{
+		Host: "smtp.example.com", Port: 587, Username: "u", Password: "p",
+		From: "noreply@example.com", FromName: "Ridgeline", BaseURL: "https://x/",
+	}
+
+	// Omitted entirely when unset, so existing mail keeps its current headers.
+	msg := string(New(base, slog.Default()).build("a@example.com", "s", "t", "<p>h</p>"))
+	if strings.Contains(msg, "Reply-To:") {
+		t.Errorf("Reply-To emitted with no address configured:\n%s", msg)
+	}
+
+	withReply := base
+	withReply.ReplyTo = "owner@example.com"
+	msg = string(New(withReply, slog.Default()).build("a@example.com", "s", "t", "<p>h</p>"))
+	if !strings.Contains(msg, "Reply-To: owner@example.com\r\n") {
+		t.Errorf("Reply-To missing:\n%s", msg)
+	}
+
+	// Sanitised like every other header: a CRLF must not open an injected line.
+	injected := base
+	injected.ReplyTo = "x@example.com\r\nBcc: attacker@evil.com"
+	msg = string(New(injected, slog.Default()).build("a@example.com", "s", "t", "<p>h</p>"))
+	if strings.Contains(msg, "\r\nBcc:") {
+		t.Errorf("header injection via Reply-To succeeded:\n%s", msg)
+	}
+}

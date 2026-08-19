@@ -150,6 +150,9 @@ func (m *Mailer) build(to, subject, text, html string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", to)
+	if m.cfg.ReplyTo != "" {
+		fmt.Fprintf(&b, "Reply-To: %s\r\n", sanitizeHeader(m.cfg.ReplyTo))
+	}
 	// Q-encoding already escapes control chars; sanitize first as belt-and-suspenders.
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", sanitizeHeader(subject)))
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))

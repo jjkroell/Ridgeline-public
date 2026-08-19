@@ -8,18 +8,34 @@
 		onclose,
 		size = 'lg',
 		maxWidth,
+		closeOnEscape = true,
+		height,
 		children
 	}: {
 		onclose: () => void;
 		size?: 'lg' | '2xl';
 		/** Override the size-derived max-width with an explicit Tailwind class. */
 		maxWidth?: string;
+		/**
+		 * Set false while a modal is stacked on top of this one. Both listen on
+		 * window, so a single Escape would otherwise close the whole stack instead
+		 * of just the topmost.
+		 */
+		closeOnEscape?: boolean;
+		/**
+		 * Fixed panel height (a Tailwind class, e.g. "h-[80vh]"). By default a modal
+		 * sizes to its content, which is right for most, but wrong for anything
+		 * whose content shrinks as you filter it — the panel jumps around under the
+		 * cursor. The max-height cap still applies. A child that should absorb the
+		 * slack needs `flex-1 min-h-0` to scroll rather than overflow.
+		 */
+		height?: string;
 		children: Snippet;
 	} = $props();
 	const maxW = $derived(maxWidth ?? (size === '2xl' ? 'md:max-w-2xl' : 'md:max-w-lg'));
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && closeOnEscape && onclose()} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
@@ -31,7 +47,7 @@
 >
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
-		class="panel rise flex max-h-[88vh] w-full flex-col {maxW}"
+		class="panel rise flex max-h-[88vh] w-full flex-col {maxW} {height ?? ''}"
 		style="animation-duration:.25s"
 		onclick={(e) => e.stopPropagation()}
 	>

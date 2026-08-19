@@ -332,6 +332,13 @@ func Open(path string) (*Store, error) {
 	// the status upsert never touches this column, so a retained /status replay
 	// cannot return an observer to service behind the operator's back.
 	db.Exec(`ALTER TABLE observers ADD COLUMN standby_since TEXT`)
+	// jwt_auth_at is the last time this observer authenticated to the broker with
+	// a token signed by its own node key — i.e. proof it has moved to the
+	// authenticated broker. NULL means it has never done so and is presumably
+	// still on the anonymous one. Persisted rather than tracked in memory
+	// precisely so it survives a daemon restart: the question it answers ("who is
+	// left to migrate?") outlives any one process.
+	db.Exec(`ALTER TABLE observers ADD COLUMN jwt_auth_at TEXT`)
 	// blocklist.peer records the far side of a SANCTIONED bridge (kind='known'):
 	// the neighbour it carries traffic to, so the console can show the link as
 	// "this node -> that node" instead of naming only one end. Uppercase pubkey,

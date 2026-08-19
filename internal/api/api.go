@@ -39,6 +39,10 @@ type Server struct {
 	analytics *analytics.Engine
 	keyChal   *keyChallengeStore // pending private-key ownership challenges
 	mail      mailSender         // outbound transactional email (nil/disabled ok)
+	// Observer token auth for the JWT broker, and which observers have used it
+	// so far. Inert until SetMQTTAuth supplies an audience.
+	mqttAuth     MQTTAuthConfig
+	mqttAuthSeen *mqttAuthState
 	// Rate limiters for the unauthenticated email-sending endpoints (register,
 	// resend-verification, forgot-password), keyed by client IP and by target email address.
 	emailIPLimiter   *rateLimiter
@@ -93,8 +97,9 @@ func New(st *store.Store, log *slog.Logger, version, webDir string) *Server {
 		hub:     newHub(),
 		// Only allow the live WebSocket from the site's own origin (or non-browser
 		// clients that send no Origin); blocks cross-site WebSocket hijacking.
-		up:      websocket.Upgrader{CheckOrigin: sameOriginWS},
-		keyChal: newKeyChallengeStore(),
+		up:           websocket.Upgrader{CheckOrigin: sameOriginWS},
+		keyChal:      newKeyChallengeStore(),
+		mqttAuthSeen: newMQTTAuthState(),
 		// ~5 emails/IP then 1 every 2 min; ~2 per target address then 1 every 10 min.
 		emailIPLimiter:   newRateLimiter(1.0/120, 5),
 		emailAddrLimiter: newRateLimiter(1.0/600, 2),
@@ -182,6 +187,15 @@ func (s *Server) Handler() http.Handler {
 	// The admin console is one session-gated area for any is_admin account:
 	// member administration + injection detection / quarantine / purge. (The old
 	// static admin-token gate has been removed in favour of the account login.)
+	// Broker-facing observer authentication. These are called by the JWT broker
+	// over the compose network and are NOT session-authenticated — the public
+	// edge must block /api/mqtt-auth/* (see deploy/Caddyfile). They 404 until an
+	// audience is configured.
+	mux.HandleFunc("POST /api/mqtt-auth/user", s.mqttAuthUser)
+	mux.HandleFunc("POST /api/mqtt-auth/superuser", s.mqttAuthSuperuser)
+	mux.HandleFunc("POST /api/mqtt-auth/acl", s.mqttAuthACL)
+
+	mux.HandleFunc("GET /api/admin/mqtt-auth", s.requireAdminUser(s.adminMQTTAuth))
 	mux.HandleFunc("GET /api/admin/users", s.requireAdminUser(s.adminListUsers))
 	mux.HandleFunc("POST /api/admin/users/flags", s.requireAdminUser(s.adminSetUserFlags))
 	mux.HandleFunc("POST /api/admin/users/block", s.requireAdminUser(s.adminBlockUser))

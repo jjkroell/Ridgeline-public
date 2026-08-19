@@ -18,6 +18,18 @@ type Config struct {
 	WebDir string `json:"webDir"`
 	// MQTT configures the upstream packet source.
 	MQTT MQTT `json:"mqtt"`
+	// ExtraBrokers are additional observer brokers ingested alongside MQTT, each
+	// with its own client. This exists so an authenticated broker can be stood up
+	// beside the anonymous one and observers migrated across a node at a time,
+	// with both feeding the same store — see MQTTAuth.
+	//
+	// An observer must publish to exactly ONE of them: store.Record inserts
+	// observations unconditionally, so a node publishing to two brokers is
+	// counted twice.
+	ExtraBrokers []MQTT `json:"extraBrokers"`
+	// MQTTAuth configures observer token authentication for the authenticated
+	// broker. Empty Audience leaves the /api/mqtt-auth/* endpoints disabled.
+	MQTTAuth MQTTAuth `json:"mqttAuth"`
 	// NOTE: there is no admin token. The /api/admin/* endpoints are gated by the
 	// account is_admin flag (session auth); the first account registered on a
 	// fresh deployment becomes the protected owner/admin. A legacy "adminToken"
@@ -70,6 +82,11 @@ type Email struct {
 	From     string `json:"from"`     // envelope + header From, e.g. noreply@example.com
 	FromName string `json:"fromName"` // display name, e.g. "Ridgeline"
 	BaseURL  string `json:"baseURL"`  // public origin, e.g. https://ridgeline.example.com
+	// ReplyTo is where replies should go when From is an unattended address.
+	// Optional: omitted entirely when empty, so mail keeps its current headers.
+	// Worth setting if anything sent from here ever invites a reply — a message
+	// that says "reply to this" from a noreply address bounces.
+	ReplyTo string `json:"replyTo"`
 }
 
 // Enabled reports whether outbound email is fully configured. Requiring the
@@ -85,6 +102,21 @@ type MQTT struct {
 	Username string   `json:"username"`
 	Password string   `json:"password"`
 	Topics   []string `json:"topics"` // subscriptions, e.g. meshcore/+/+/packets
+}
+
+// MQTTAuth configures Ed25519 observer-token authentication, which the JWT
+// broker delegates to ridgelined over the compose network.
+type MQTTAuth struct {
+	// Audience is the hostname observers are configured with via
+	// `set mqttN.audience`, and must equal their token's "aud" claim exactly.
+	// Empty disables observer authentication.
+	Audience string `json:"audience"`
+	// ConsumerUsername/Password is ridgelined's own ingest login on the
+	// authenticated broker, which allows anonymous connections from nobody.
+	// This is not an observer: it proves no node identity and is granted
+	// superuser so it can subscribe across every observer's topics.
+	ConsumerUsername string `json:"consumerUsername"`
+	ConsumerPassword string `json:"consumerPassword"`
 }
 
 // Default returns a Config populated with sensible defaults for local
@@ -139,6 +171,17 @@ func Load(path string) (Config, error) {
 	}
 	if len(cfg.MQTT.Topics) == 0 {
 		cfg.MQTT.Topics = []string{"meshcore/+/+/packets"}
+	}
+	for i := range cfg.ExtraBrokers {
+		if len(cfg.ExtraBrokers[i].Topics) == 0 {
+			cfg.ExtraBrokers[i].Topics = cfg.MQTT.Topics
+		}
+		// Client IDs must be distinct: two clients sharing one on the same broker
+		// evict each other in a reconnect loop, and these commonly differ only by
+		// host. Derive from the primary rather than leaving it to be forgotten.
+		if cfg.ExtraBrokers[i].ClientID == "" {
+			cfg.ExtraBrokers[i].ClientID = fmt.Sprintf("%s-extra-%d", cfg.MQTT.ClientID, i+1)
+		}
 	}
 	return cfg, nil
 }

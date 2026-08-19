@@ -118,14 +118,46 @@ func run(log *slog.Logger, configPath string) error {
 	engine := analytics.New(6)
 	apiServer.SetAnalytics(engine)
 
-	in := ingest.New(cfg.MQTT, st, log)
-	in.OnObservation = apiServer.Broadcast
-	if err := in.Start(); err != nil {
-		// Don't abort the whole daemon if the broker is briefly unavailable;
-		// paho retries the connection in the background.
-		log.Warn("mqtt connect pending", "err", err)
+	// Observer authentication for the JWT broker. Inert until an audience is
+	// configured, so this is a no-op on deployments running only the anonymous
+	// broker.
+	apiServer.SetMQTTAuth(api.MQTTAuthConfig{
+		Audience:         cfg.MQTTAuth.Audience,
+		ConsumerUsername: cfg.MQTTAuth.ConsumerUsername,
+		ConsumerPassword: cfg.MQTTAuth.ConsumerPassword,
+	})
+	if cfg.MQTTAuth.Audience != "" {
+		log.Info("observer token auth enabled", "audience", cfg.MQTTAuth.Audience)
 	}
-	defer in.Stop()
+
+	// One ingestor per broker, all writing to the same store (store.Record
+	// serializes writes behind a mutex). During the auth migration this is how
+	// the anonymous and authenticated brokers both feed one database.
+	brokers := append([]config.MQTT{cfg.MQTT}, cfg.ExtraBrokers...)
+	ingestors := make([]*ingest.Ingestor, 0, len(brokers))
+	for _, bcfg := range brokers {
+		in := ingest.New(bcfg, st, log)
+		in.OnObservation = apiServer.Broadcast
+		ingestors = append(ingestors, in)
+	}
+	// Start them concurrently. Ingestor.Start waits up to 10s for a fast connect
+	// before letting paho retry in the background; doing that serially would
+	// multiply the delay before the HTTP server comes up by the number of
+	// brokers, which is exactly what that bounded wait exists to avoid.
+	for i, in := range ingestors {
+		go func(in *ingest.Ingestor, bcfg config.MQTT) {
+			if err := in.Start(); err != nil {
+				// Don't abort the whole daemon if a broker is briefly unavailable;
+				// paho retries the connection in the background.
+				log.Warn("mqtt connect pending", "broker", bcfg.Broker, "err", err)
+			}
+		}(in, brokers[i])
+	}
+	defer func() {
+		for _, in := range ingestors {
+			in.Stop()
+		}
+	}()
 
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: apiServer.Handler()}
 

@@ -21,6 +21,28 @@ services:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
 
+  # Authenticated observer broker, running BESIDE the anonymous one above so
+  # observers can be migrated a node at a time with nothing losing its
+  # connection. Observers here present an Ed25519 token signed by their own node
+  # key; every decision is delegated to ridgelined (/api/mqtt-auth/*).
+  #   your broker hostname -> reverse proxy / tunnel -> localhost:9102
+  # Retire this only once `get mqtt-auth` shows every observer migrated, at
+  # which point nothing is publishing to the anonymous broker.
+  mosquitto-jwt:
+    build:
+      context: ./mosquitto-jwt
+    image: ridgeline-mosquitto-jwt:latest
+    container_name: ridgeline-mosquitto-jwt
+    restart: unless-stopped
+    ports:
+      # Same dual-loopback bind as the anonymous broker: on this VM `localhost`
+      # resolves to ::1 only, so cloudflared needs the IPv6 bind or it 502s.
+      - "127.0.0.1:9102:9001"
+      - "[::1]:9102:9001"
+    volumes:
+      - ./mosquitto-jwt.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-jwt-data:/mosquitto/data
+
   ridgelined:
     build:
       context: ..
@@ -38,6 +60,7 @@ services:
     user: "${RIDGELINE_UID:-1000}:${RIDGELINE_GID:-1000}"
     depends_on:
       - mosquitto
+      - mosquitto-jwt
     volumes:
       - ./config.json:/config/config.json:ro
       - ./data:/data # ridgeline.db lives here (bind mount)
@@ -66,5 +89,6 @@ services:
 
 volumes:
   mosquitto-data:
+  mosquitto-jwt-data:
   caddy-data:
   caddy-config:
