@@ -4,6 +4,18 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.10.1] — 2026-08-19
+
+### Fixed
+- **Marking a bridge now takes effect immediately.** Recording which node sits on
+  the far side of a bridge could leave the site unchanged for up to half an hour,
+  because far-side detection only ran on a timer — so doing exactly the right
+  thing in the console looked like nothing had happened. It now recomputes as soon
+  as you save the bridge.
+- **Far-side detection no longer runs silently when there's nothing to do.** With
+  no bridge recorded it produced no log output at all, which made a perfectly
+  healthy install look like the feature wasn't running.
+
 ## [v0.10.0] — 2026-08-19
 
 ### Added

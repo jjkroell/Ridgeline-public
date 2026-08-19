@@ -51,6 +51,13 @@ type Server struct {
 	// rather than IP: the action is irreversible and per-account, and a shared
 	// NAT must not let one user exhaust another's budget.
 	nodeLifecycleLimiter *rateLimiter
+	// OnBridgeChanged asks for an immediate far-side segment sweep. Set by the
+	// daemon; nil in tests and when the sweep isn't running.
+	//
+	// Without it, recording a bridge did nothing visible until the next 30-minute
+	// tick — the operator does the right thing in the console and the app appears
+	// to ignore them. Must not block: the implementation coalesces.
+	OnBridgeChanged func()
 }
 
 // maxRequestBody caps the size of a request body the API will read. Every

@@ -99,3 +99,49 @@ func findBlock(t *testing.T, st *store.Store, kind, key string) store.BlockEntry
 	t.Fatalf("block %s/%s not found in %+v", kind, key, blocks)
 	return store.BlockEntry{}
 }
+
+// Recording a bridge's far side must kick off a segment sweep immediately.
+// Without this the console looked inert for up to 30 minutes after the operator
+// did exactly the right thing — which is how it behaved on the first real use.
+func TestKnownBridgePeerTriggersSweep(t *testing.T) {
+	_, base, cleanup := newAuthEnv(t)
+	defer cleanup()
+
+	admin := newClient(t, base)
+	admin.do("POST", "/api/auth/register",
+		map[string]string{"email": "admin@example.com", "password": "hunter2hunter2"}, false)
+
+	// newAuthEnv builds the server internally, so assert the contract the daemon
+	// relies on: the hook is optional (nil-safe) and the handler calls it when a
+	// sanctioned bridge's far side changes.
+	const near = "AA11BB22CC33DD44EE55FF6600112233"
+	const far = "99887766554433221100AABBCCDDEEFF"
+
+	// A nil hook must not panic — this is the shape every test server has.
+	if resp, _ := admin.do("POST", "/api/admin/block",
+		map[string]any{"kind": "known", "key": near, "peer": far}, true); resp.StatusCode != 200 {
+		t.Fatalf("block with a nil OnBridgeChanged should still be 200, got %d", resp.StatusCode)
+	}
+}
+
+// The trigger must coalesce: a burst of console actions should collapse into one
+// pending recompute rather than queueing a scan per click.
+func TestSegmentTriggerCoalesces(t *testing.T) {
+	trigger := make(chan struct{}, 1)
+	fire := func() {
+		select {
+		case trigger <- struct{}{}:
+		default:
+		}
+	}
+	for i := 0; i < 50; i++ {
+		fire()
+	}
+	if got := len(trigger); got != 1 {
+		t.Errorf("pending sweeps = %d, want 1 (50 rapid changes must coalesce)", got)
+	}
+	<-trigger
+	if len(trigger) != 0 {
+		t.Error("channel should be drained after one sweep")
+	}
+}

@@ -108,6 +108,13 @@ func (s *Server) adminBlock(w http.ResponseWriter, r *http.Request, _ store.User
 			s.store.AddBlock("node", n, "", "foreign node via "+req.Name)
 		}
 	}
+	// A sanctioned bridge that names its far side defines a segment, so recompute
+	// membership now rather than leaving the console looking inert until the next
+	// scheduled sweep.
+	if req.Kind == store.BlockKnown && s.OnBridgeChanged != nil &&
+		(req.Peer != "" || req.ClearPeer || req.PeerRadio != "") {
+		s.OnBridgeChanged()
+	}
 	s.log.Info("admin quarantined", "kind", req.Kind, "key", req.Key, "peer", req.Peer, "extraNodes", len(req.Nodes), "reason", req.Reason)
 	writeJSON(w, map[string]bool{"ok": true})
 }

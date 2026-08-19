@@ -98,6 +98,16 @@ func run(log *slog.Logger, configPath string) error {
 	}
 
 	apiServer := api.New(st, log, version, cfg.WebDir)
+	// Recording a bridge's far side should take effect at once, not at the next
+	// scheduled sweep. One slot: extra requests while a sweep is pending are
+	// redundant, so they are dropped rather than queued.
+	segmentTrigger := make(chan struct{}, 1)
+	apiServer.OnBridgeChanged = func() {
+		select {
+		case segmentTrigger <- struct{}{}:
+		default:
+		}
+	}
 	apiServer.SetEnvironment(cfg.Environment)
 
 	// Outbound transactional email (verification + note notifications). Disabled
@@ -132,7 +142,7 @@ func run(log *slog.Logger, configPath string) error {
 	go runAnalytics(ctx, engine, st, log)
 	go runHashSizeConsensus(ctx, st, log)
 	go runRetention(ctx, st, log)
-	go runSegmentSweep(ctx, st, log)
+	go runSegmentSweep(ctx, st, log, segmentTrigger)
 	go runSessionPrune(ctx, st, log)
 	go runClaimPrune(ctx, st, log)
 	if cfg.NodeRetentionDays > 0 {
@@ -331,7 +341,10 @@ const (
 // on a radio segment this deployment cannot hear directly. No-ops when no
 // sanctioned bridge has a peer recorded — a link needs both ends to define a
 // segment.
-func runSegmentSweep(ctx context.Context, st *store.Store, log *slog.Logger) {
+// trigger asks for an out-of-band sweep (see api.Server.OnBridgeChanged). It is
+// buffered with a single slot so a burst of console actions coalesces into one
+// recompute instead of queueing several scans of the observation window.
+func runSegmentSweep(ctx context.Context, st *store.Store, log *slog.Logger, trigger <-chan struct{}) {
 	sweep := func() {
 		links, err := st.KnownBridgeLinks()
 		if err != nil {
@@ -339,6 +352,10 @@ func runSegmentSweep(ctx context.Context, st *store.Store, log *slog.Logger) {
 			return
 		}
 		if len(links) == 0 {
+			// Say so. Returning silently made "working, nothing to do" and "not
+			// running at all" look identical in the logs, which cost real time
+			// diagnosing a deployment that was in fact fine.
+			log.Debug("segment sweep: no sanctioned bridge names a far side, nothing to compute")
 			return
 		}
 		nodes, err := st.ListNodes()
@@ -369,6 +386,8 @@ func runSegmentSweep(ctx context.Context, st *store.Store, log *slog.Logger) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			sweep()
+		case <-trigger:
 			sweep()
 		}
 	}
