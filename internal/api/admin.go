@@ -50,6 +50,12 @@ type blockReq struct {
 	// Nodes optionally blocks additional node pubkeys as kind "node" alongside
 	// the main entry — used to hide a bridge's whole foreign cluster at once.
 	Nodes []string `json:"nodes,omitempty"`
+	// Peer names the far side of a SANCTIONED bridge (kind "known"): the
+	// neighbour it carries traffic to, so the console can render the link as
+	// "this node -> that node". Empty leaves any recorded peer alone; send
+	// clearPeer to forget it.
+	Peer      string `json:"peer,omitempty"`
+	ClearPeer bool   `json:"clearPeer,omitempty"`
 }
 
 func (s *Server) adminBlock(w http.ResponseWriter, r *http.Request, _ store.User) {
@@ -62,16 +68,28 @@ func (s *Server) adminBlock(w http.ResponseWriter, r *http.Request, _ store.User
 		writeErr(w, http.StatusBadRequest, "kind must be observer|bridge|node|allow|known and key required")
 		return
 	}
-	if err := s.store.AddBlock(req.Kind, req.Key, req.Name, req.Reason); err != nil {
+	// A peer only means something for a sanctioned bridge — a link has two ends.
+	// Reject it elsewhere rather than storing a value no screen will ever show.
+	if req.Peer != "" && req.Kind != store.BlockKnown {
+		writeErr(w, http.StatusBadRequest, "peer is only valid for kind=known")
+		return
+	}
+	if err := s.store.AddBlockPeer(req.Kind, req.Key, req.Name, req.Reason, req.Peer); err != nil {
 		s.fail(w, err)
 		return
+	}
+	if req.ClearPeer && req.Peer == "" {
+		if err := s.store.ClearBlockPeer(req.Kind, req.Key); err != nil {
+			s.fail(w, err)
+			return
+		}
 	}
 	for _, n := range req.Nodes {
 		if n != "" {
 			s.store.AddBlock("node", n, "", "foreign node via "+req.Name)
 		}
 	}
-	s.log.Info("admin quarantined", "kind", req.Kind, "key", req.Key, "extraNodes", len(req.Nodes), "reason", req.Reason)
+	s.log.Info("admin quarantined", "kind", req.Kind, "key", req.Key, "peer", req.Peer, "extraNodes", len(req.Nodes), "reason", req.Reason)
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -176,60 +194,6 @@ func (s *Server) adminDelete(w http.ResponseWriter, r *http.Request, _ store.Use
 		"claimsDeleted", res.Claims, "notesDeleted", res.Notes,
 		"locationsDeleted", res.Locations, "sharesDeleted", res.Shares)
 	writeJSON(w, res)
-}
-
-// adminRetiredObservers lists the observers currently withdrawn from the
-// observers page.
-func (s *Server) adminRetiredObservers(w http.ResponseWriter, _ *http.Request, _ store.User) {
-	obs, err := s.store.ListRetiredObservers()
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	writeJSON(w, obs)
-}
-
-// adminRetireObserver withdraws a decommissioned observer from the observers
-// page while keeping every packet it reported.
-//
-// This is the non-destructive counterpart to POST /api/admin/delete, which runs
-// ScrubNodes and deletes the observer's observations outright. Retiring is the
-// right action for a receiver that has simply left the network: its history
-// stays attributable to it, and the retirement survives the broker replaying
-// its retained /status message.
-func (s *Server) adminRetireObserver(w http.ResponseWriter, r *http.Request, _ store.User) {
-	s.setObserverRetired(w, r, true)
-}
-
-// adminUnretireObserver returns a retired observer to the observers page.
-func (s *Server) adminUnretireObserver(w http.ResponseWriter, r *http.Request, _ store.User) {
-	s.setObserverRetired(w, r, false)
-}
-
-func (s *Server) setObserverRetired(w http.ResponseWriter, r *http.Request, retire bool) {
-	var req struct {
-		Observer string `json:"observer"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad request body")
-		return
-	}
-	if strings.TrimSpace(req.Observer) == "" {
-		writeErr(w, http.StatusBadRequest, "observer required")
-		return
-	}
-	var err error
-	if retire {
-		err = s.store.RetireObserver(req.Observer, time.Now().UTC().Format(time.RFC3339))
-	} else {
-		err = s.store.UnretireObserver(req.Observer)
-	}
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	s.log.Info("admin observer retirement", "observer", req.Observer, "retired", retire)
-	writeJSON(w, map[string]any{"observer": req.Observer, "retired": retire})
 }
 
 // adminStandbyObserver stands an observer down: it stays connected and visible,

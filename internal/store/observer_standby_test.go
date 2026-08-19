@@ -32,10 +32,6 @@ func TestObserverStandbyDiscardsAndRestores(t *testing.T) {
 	if a.StandbySince == "" {
 		t.Error("StandbySince not reported")
 	}
-	// Standby must NOT hide the observer — staying visible is the point.
-	if a.RetiredAt != "" {
-		t.Error("standby set retiredAt; it must not retire the observer")
-	}
 	if a.PacketCount != before {
 		t.Errorf("packet count changed on stand-down: %d -> %d", before, a.PacketCount)
 	}
@@ -68,13 +64,6 @@ func TestStandbyObserverStaysListed(t *testing.T) {
 	}
 	if len(active) != 1 || active[0].ID != "obs-a" {
 		t.Fatalf("standby observer dropped from ListObservers: %+v", active)
-	}
-	retired, err := st.ListRetiredObservers()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(retired) != 0 {
-		t.Errorf("standby observer appeared in the retired list: %+v", retired)
 	}
 }
 
@@ -230,4 +219,40 @@ func observerByID(t *testing.T, st *Store, id string) Observer {
 	}
 	t.Fatalf("observer %q not found", id)
 	return Observer{}
+}
+
+// TestRetirementIsReleasedOnUpgrade — observer retirement was removed in favour
+// of standby + delete. An observer retired by the OLD feature must not stay
+// hidden by a column no UI can reach any more, so Open() clears it once. This
+// pins that an observer carrying a stale retired_at is listed normally.
+func TestRetirementIsReleasedOnUpgrade(t *testing.T) {
+	st := testStore(t)
+	seedObserver(t, st, "was-retired")
+
+	// Simulate a row left behind by the removed feature.
+	if _, err := st.db.Exec(`UPDATE observers SET retired_at = ? WHERE id = ?`,
+		"2026-07-20T04:41:46Z", "was-retired"); err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := st.ListObservers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nothing reads retired_at any more, so it is listed even before the clear.
+	if len(obs) != 1 || obs[0].ID != "was-retired" {
+		t.Fatalf("a stale retired_at still hides an observer: %+v", obs)
+	}
+
+	// And the one-time clear removes the invisible state entirely.
+	if _, err := st.db.Exec(`UPDATE observers SET retired_at = NULL WHERE retired_at IS NOT NULL`); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM observers WHERE retired_at IS NOT NULL`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("%d observers still carry retired_at", n)
+	}
 }

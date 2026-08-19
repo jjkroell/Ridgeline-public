@@ -56,9 +56,6 @@ func TestAdminObserverStandby(t *testing.T) {
 	if obs[0].StandbySince == "" {
 		t.Error("standbySince not exposed on the observer")
 	}
-	if obs[0].RetiredAt != "" {
-		t.Error("standby must not retire the observer")
-	}
 
 	// And back to service.
 	if resp, _ := admin.do("POST", "/api/admin/observers/resume",

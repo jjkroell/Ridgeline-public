@@ -10,6 +10,23 @@
 
 	let { compact = false }: { compact?: boolean } = $props();
 
+	// Collapsed by default: the member list grows without bound on a busy site and
+	// pushes the detection/bridge sections — the things an admin actually opens
+	// this page for — below the fold. The choice is remembered per browser so an
+	// operator who lives in this panel isn't re-collapsing it every visit.
+	const OPEN_KEY = 'ridgeline-admin-members-open';
+	let open = $state(false);
+	$effect(() => {
+		// Read once on mount; guarded because this component also renders on the
+		// server, where localStorage doesn't exist.
+		if (typeof localStorage === 'undefined') return;
+		open = localStorage.getItem(OPEN_KEY) === '1';
+	});
+	function toggle() {
+		open = !open;
+		if (typeof localStorage !== 'undefined') localStorage.setItem(OPEN_KEY, open ? '1' : '0');
+	}
+
 	const shell = $derived(
 		compact
 			? 'border-line/60 bg-panel mb-3 rounded-2xl border overflow-hidden'
@@ -91,17 +108,32 @@
 </script>
 
 <section class={shell}>
-	<div class="border-line/70 flex items-center gap-2.5 border-b {head}">
-		<h2 class="font-display text-fg font-700 tracking-wide {compact ? 'text-xs' : 'text-sm'}">
-			MEMBERS
-		</h2>
-		<span class="label normal-case text-fg-faint">{members.length} registered</span>
+	<div class="border-line/70 flex items-center gap-2.5 {open ? 'border-b' : ''} {head}">
+		<!-- The whole header is the toggle; Refresh sits outside it so hitting
+		     Refresh can't collapse the panel out from under you. -->
 		<button
-			onclick={loadMembers}
-			class="label hover:text-signal ml-auto transition-colors"
-			disabled={loadingMembers}>{loadingMembers ? 'Loading…' : 'Refresh'}</button
+			onclick={toggle}
+			aria-expanded={open}
+			class="hover:text-signal -m-1 flex min-w-0 flex-1 items-center gap-2.5 p-1 text-left transition-colors"
 		>
+			<span
+				class="text-fg-faint inline-block shrink-0 text-[0.7rem] transition-transform duration-150"
+				style="transform: rotate({open ? 90 : 0}deg)">▶</span
+			>
+			<h2 class="font-display text-fg font-700 tracking-wide {compact ? 'text-xs' : 'text-sm'}">
+				MEMBERS
+			</h2>
+			<span class="label normal-case text-fg-faint">{members.length} registered</span>
+		</button>
+		{#if open}
+			<button
+				onclick={loadMembers}
+				class="label hover:text-signal shrink-0 transition-colors"
+				disabled={loadingMembers}>{loadingMembers ? 'Loading…' : 'Refresh'}</button
+			>
+		{/if}
 	</div>
+	{#if open}
 	{#if membersError}
 		<div class="text-coral py-3 text-xs {compact ? 'px-4' : 'px-5'}">{membersError}</div>
 	{/if}
@@ -175,4 +207,5 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 </section>

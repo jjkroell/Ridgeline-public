@@ -12,9 +12,9 @@
 	} from '$lib/api';
 	import { ago, purgeCascade, roleColor, roleLabel, skippedNote } from '$lib/format';
 	import MembersPanel from '$lib/components/MembersPanel.svelte';
-	import RetiredObserversPanel from '$lib/components/RetiredObserversPanel.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import WindowToggle from '$lib/components/WindowToggle.svelte';
+	import KnownBridgePicker from '$lib/components/KnownBridgePicker.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 
 	// The admin console is gated by the signed-in account's is_admin flag (no more
@@ -122,13 +122,34 @@
 	// Mark a bridge as sanctioned. Unlike Dismiss — which asserts a candidate is
 	// NOT a bridge and hides it — this asserts it is one and is wanted, so it
 	// stays visible, labelled, and sorted below anything unexpected.
-	async function markKnown(b: BridgeCandidate) {
+	// Marking a bridge known asks which node is on the FAR side of the link, since
+	// detection only ever names the near end and only the operator knows the other.
+	let knownPicker = $state<BridgeCandidate | null>(null);
+
+	function markKnown(b: BridgeCandidate) {
+		knownPicker = b;
+	}
+
+	async function confirmKnown(peer: string) {
+		const b = knownPicker;
+		if (!b) return;
 		busy = b.nodeKey;
 		msg = '';
 		try {
-			await admin.block(auth.csrf, { kind: 'known', key: b.nodeKey, name: b.name, reason: 'known bridge' });
+			await admin.block(auth.csrf, {
+				kind: 'known',
+				key: b.nodeKey,
+				name: b.name,
+				reason: 'known bridge',
+				peer,
+				// An empty peer normally means "leave alone"; here the operator chose it.
+				clearPeer: peer === ''
+			});
 			await refreshBlocks();
-			msg = `${b.name} marked as a known bridge — it stays listed but won't read as a new finding.`;
+			knownPicker = null;
+			msg = peer
+				? `${b.name} marked as a known bridge, linked to its peer.`
+				: `${b.name} marked as a known bridge — it stays listed but won't read as a new finding.`;
 		} catch (e) {
 			msg = `mark known: ${(e as Error).message}`;
 		} finally {
@@ -310,8 +331,14 @@
 	// A sanctioned bridge is not quarantined — nothing is blocked or hidden — so
 	// it gets its own list rather than sitting under "blocked/dismissed".
 	const knownEntries = $derived(blocks.filter((b) => b.kind === 'known'));
-	const quarantineEntries = $derived(
-		blocks.filter((b) => b.reason !== 'purged' && b.kind !== 'known')
+	// Blocked and dismissed do OPPOSITE things — one drops traffic at ingest, the
+	// other only tells detection to stop flagging a node — so they get their own
+	// sections rather than sharing a heading that is wrong for half the rows.
+	const blockedEntries = $derived(
+		blocks.filter((b) => b.reason !== 'purged' && b.kind !== 'known' && b.kind !== 'allow')
+	);
+	const dismissedEntries = $derived(
+		blocks.filter((b) => b.reason !== 'purged' && b.kind === 'allow')
 	);
 	const purgedEntries = $derived(blocks.filter((b) => b.reason === 'purged'));
 </script>
@@ -639,8 +666,20 @@
 					{#each knownEntries as b (b.kind + b.key)}
 						<div class="flex items-center gap-3 px-5 py-2.5 text-sm">
 							<span class="label text-signal !text-[0.58rem]">known</span>
-							<a href="/nodes/{b.key}" class="text-fg hover:text-signal min-w-0 flex-1 truncate">{b.name || b.key}</a>
-							{#if b.reason}<span class="text-fg-faint text-xs">{b.reason}</span>{/if}
+							<!-- A bridge is a LINK. Show both ends when the far side is known;
+							     fall back to naming just the near end when it isn't. -->
+							<div class="flex min-w-0 flex-1 items-center gap-1.5">
+								<a href="/nodes/{b.key}" class="text-fg hover:text-signal min-w-0 truncate">{b.name || b.key}</a>
+								{#if b.peer}
+									<span class="text-fg-faint shrink-0">→</span>
+									<a href="/nodes/{b.peer}" class="text-fg hover:text-signal min-w-0 truncate"
+										>{b.peerName || b.peer.slice(0, 12)}</a
+									>
+								{:else}
+									<span class="text-fg-faint shrink-0 text-xs italic">→ peer not set</span>
+								{/if}
+							</div>
+							{#if b.reason}<span class="text-fg-faint shrink-0 text-xs">{b.reason}</span>{/if}
 							<button
 								onclick={() => removeBlock(b)}
 								disabled={busy === b.kind + b.key}
@@ -652,16 +691,16 @@
 			</section>
 		{/if}
 
-		<!-- Active quarantines -->
-		{#if quarantineEntries.length > 0}
+		<!-- Blocked: traffic is actually being dropped -->
+		{#if blockedEntries.length > 0}
 		<section class="panel rise mt-6">
 			<div class="border-line/70 flex items-center gap-2.5 border-b px-5 py-3.5">
-				<h2 class="font-display text-fg text-sm font-700 tracking-wide">QUARANTINE LIST</h2>
-				<span class="label normal-case text-fg-faint">blocked = dropped at ingest + hidden · dismissed = excluded from detection</span>
-				<span class="label ml-auto tnum">{quarantineEntries.length}</span>
+				<h2 class="font-display text-fg text-sm font-700 tracking-wide">BLOCKED</h2>
+				<span class="label normal-case text-fg-faint">dropped at ingest and hidden from the site</span>
+				<span class="label ml-auto tnum">{blockedEntries.length}</span>
 			</div>
 			<div class="divide-line/40 divide-y">
-					{#each quarantineEntries as b (b.kind + b.key)}
+					{#each blockedEntries as b (b.kind + b.key)}
 						<div class="flex items-center gap-3 px-5 py-2.5 text-sm">
 							<span class="label !text-[0.58rem]" style="color:{kindColor[b.kind] ?? 'var(--color-fg-dim)'}">{kindLabel(b.kind)}</span>
 							<span class="text-fg min-w-0 flex-1 truncate">{b.name || b.key}</span>
@@ -670,7 +709,32 @@
 								onclick={() => removeBlock(b)}
 								disabled={busy === b.kind + b.key}
 								class="label hover:text-signal disabled:opacity-50"
-							>release</button>
+							>unblock</button>
+						</div>
+					{/each}
+				</div>
+		</section>
+		{/if}
+
+		<!-- Dismissed: nothing is blocked; detection is just told to stop asking -->
+		{#if dismissedEntries.length > 0}
+		<section class="panel rise mt-6">
+			<div class="border-line/70 flex items-center gap-2.5 border-b px-5 py-3.5">
+				<h2 class="font-display text-fg text-sm font-700 tracking-wide">DISMISSED</h2>
+				<span class="label normal-case text-fg-faint">confirmed not a bridge — excluded from detection, nothing is blocked</span>
+				<span class="label ml-auto tnum">{dismissedEntries.length}</span>
+			</div>
+			<div class="divide-line/40 divide-y">
+					{#each dismissedEntries as b (b.kind + b.key)}
+						<div class="flex items-center gap-3 px-5 py-2.5 text-sm">
+							<span class="label text-signal !text-[0.58rem]">dismissed</span>
+							<a href="/nodes/{b.key}" class="text-fg hover:text-signal min-w-0 flex-1 truncate">{b.name || b.key}</a>
+							{#if b.reason && b.reason !== 'dismissed'}<span class="text-fg-faint text-xs">{b.reason}</span>{/if}
+							<button
+								onclick={() => removeBlock(b)}
+								disabled={busy === b.kind + b.key}
+								class="label hover:text-signal disabled:opacity-50"
+							>restore</button>
 						</div>
 					{/each}
 				</div>
@@ -711,6 +775,14 @@
 		{/if}
 
 		<MembersPanel />
-		<RetiredObserversPanel />
 	{/if}
 </div>
+
+{#if knownPicker}
+	<KnownBridgePicker
+		nodeKey={knownPicker.nodeKey}
+		nodeName={knownPicker.name}
+		onconfirm={confirmKnown}
+		oncancel={() => (knownPicker = null)}
+	/>
+{/if}

@@ -183,7 +183,7 @@ func (s *Store) Stats() (Stats, error) {
 	}
 	// Retired observers are excluded so this agrees with the observers page,
 	// which lists only the active ones.
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM observers WHERE retired_at IS NULL`).Scan(&st.Observers); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM observers`).Scan(&st.Observers); err != nil {
 		return st, err
 	}
 	var last *string
@@ -215,11 +215,9 @@ type Observer struct {
 	PacketCount  int             `json:"packetCount"`
 	Status       *ObserverStatus `json:"status,omitempty"`
 	LastStatusAt string          `json:"lastStatusAt,omitempty"`
-	// RetiredAt is set on decommissioned observers, which ListObservers omits.
-	RetiredAt string `json:"retiredAt,omitempty"`
 	// StandbySince is set while an observer is connected but having its packets
-	// discarded at ingest. Unlike RetiredAt this does NOT hide the observer —
-	// staying visible is the point, so the operator can see the stand-down.
+	// discarded at ingest. It does NOT hide the observer — staying visible is the
+	// point, so the operator can see the stand-down.
 	StandbySince string `json:"standbySince,omitempty"`
 	// StandbyDropped counts packets discarded since this daemon started (see
 	// Store.StandbyDropped). Only meaningful while StandbySince is set.
@@ -247,29 +245,25 @@ type ObserverStatus struct {
 	QueueLen        *int     `json:"queueLen,omitempty"`
 }
 
-// ListObservers returns the ACTIVE observers, most recently active first, with a
+// ListObservers returns every known observer, most recently active first, with a
 // location joined from the nodes table when the observer's key has advertised.
-// Retired (decommissioned) observers are omitted — see ListRetiredObservers.
+//
+// There is no hidden set. Observer retirement was removed in v0.9.9: an observer
+// is in service, on standby (visible, badged, packets discarded), or deleted.
+// A receiver that simply goes quiet is swept by DeleteStaleObservers and returns
+// on its next packet, which is what retirement was really being used for.
 func (s *Store) ListObservers() ([]Observer, error) {
-	return s.listObservers(`o.retired_at IS NULL`)
+	return s.listObservers()
 }
 
-// ListRetiredObservers returns the observers that have been retired, most
-// recently retired first. Their observations are untouched and still counted
-// everywhere; only their presence on the observers page is withdrawn.
-func (s *Store) ListRetiredObservers() ([]Observer, error) {
-	return s.listObservers(`o.retired_at IS NOT NULL`)
-}
-
-func (s *Store) listObservers(where string) ([]Observer, error) {
+func (s *Store) listObservers() ([]Observer, error) {
 	rows, err := s.db.Query(`
 		SELECT o.id, COALESCE(o.name,''), COALESCE(o.region,''), COALESCE(o.pubkey,''),
 		       n.latitude, n.longitude, o.first_seen, o.last_seen, o.packet_count,
-		       o.status_json, COALESCE(o.last_status_at,''), COALESCE(o.retired_at,''),
+		       o.status_json, COALESCE(o.last_status_at,''),
 		       COALESCE(o.standby_since,'')
 		FROM observers o
 		LEFT JOIN nodes n ON n.pubkey = o.pubkey
-		WHERE ` + where + `
 		ORDER BY o.last_seen DESC`)
 	if err != nil {
 		return nil, err
@@ -282,7 +276,7 @@ func (s *Store) listObservers(where string) ([]Observer, error) {
 		var statusJSON *string
 		if err := rows.Scan(&o.ID, &o.Name, &o.Region, &o.PublicKey,
 			&o.Latitude, &o.Longitude, &o.FirstSeen, &o.LastSeen, &o.PacketCount,
-			&statusJSON, &o.LastStatusAt, &o.RetiredAt, &o.StandbySince); err != nil {
+			&statusJSON, &o.LastStatusAt, &o.StandbySince); err != nil {
 			return nil, err
 		}
 		if statusJSON != nil && *statusJSON != "" {

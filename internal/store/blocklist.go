@@ -34,6 +34,14 @@ type BlockEntry struct {
 	Name      string `json:"name,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 	CreatedAt string `json:"createdAt"`
+	// Peer is the node on the FAR side of a sanctioned bridge (BlockKnown only):
+	// the neighbour this bridge carries traffic to. Stored as an uppercase pubkey
+	// because a bridge is a link between two identities and a name is only a
+	// label — the operator can rename either end without breaking the record.
+	Peer string `json:"peer,omitempty"`
+	// PeerName is Peer's current display name, resolved at read time rather than
+	// captured at write time so a rename follows the node.
+	PeerName string `json:"peerName,omitempty"`
 }
 
 // loadBlocklist refreshes the in-memory blocklist cache from the table.
@@ -148,22 +156,49 @@ func (s *Store) IsAllowed(pubkey string) bool {
 
 // AddBlock inserts (or updates) a blocklist entry and refreshes the cache.
 func (s *Store) AddBlock(kind, key, name, reason string) error {
+	return s.AddBlockPeer(kind, key, name, reason, "")
+}
+
+// AddBlockPeer is AddBlock with the far side of a sanctioned bridge recorded.
+// peer is only meaningful for BlockKnown; passing it for any other kind stores a
+// value nothing reads. An empty peer leaves any existing one intact, so
+// re-marking a bridge doesn't silently forget which link it is.
+func (s *Store) AddBlockPeer(kind, key, name, reason, peer string) error {
 	if pubkeyKind(kind) {
 		key = strings.ToUpper(key)
 	}
+	peer = strings.ToUpper(strings.TrimSpace(peer))
+	// A bridge cannot be its own far side; storing that would render "X → X".
+	if peer == key {
+		peer = ""
+	}
 	s.mu.Lock()
 	_, err := s.db.Exec(`
-		INSERT INTO blocklist (kind, key, name, reason, created_at)
-		VALUES (?,?,?,?,?)
+		INSERT INTO blocklist (kind, key, name, reason, created_at, peer)
+		VALUES (?,?,?,?,?,?)
 		ON CONFLICT(kind, key) DO UPDATE SET
 			name   = COALESCE(NULLIF(excluded.name,''), blocklist.name),
-			reason = COALESCE(NULLIF(excluded.reason,''), blocklist.reason)`,
-		kind, key, nullStr(name), nullStr(reason), time.Now().UTC().Format(time.RFC3339))
+			reason = COALESCE(NULLIF(excluded.reason,''), blocklist.reason),
+			peer   = COALESCE(NULLIF(excluded.peer,''), blocklist.peer)`,
+		kind, key, nullStr(name), nullStr(reason), time.Now().UTC().Format(time.RFC3339), nullStr(peer))
 	s.mu.Unlock()
 	if err != nil {
 		return err
 	}
 	return s.loadBlocklist()
+}
+
+// ClearBlockPeer forgets the far side of a sanctioned bridge without unmarking
+// it. AddBlockPeer deliberately treats an empty peer as "leave alone", so
+// changing a link from "X → Y" back to "X → unknown" needs its own call.
+func (s *Store) ClearBlockPeer(kind, key string) error {
+	if pubkeyKind(kind) {
+		key = strings.ToUpper(key)
+	}
+	s.mu.Lock()
+	_, err := s.db.Exec(`UPDATE blocklist SET peer = NULL WHERE kind = ? AND key = ?`, kind, key)
+	s.mu.Unlock()
+	return err
 }
 
 // RemoveBlock deletes a blocklist entry (un-quarantine) and refreshes the cache.
@@ -180,9 +215,17 @@ func (s *Store) RemoveBlock(kind, key string) error {
 	return s.loadBlocklist()
 }
 
-// ListBlocks returns all blocklist entries, newest first.
+// ListBlocks returns all blocklist entries, newest first. A sanctioned bridge's
+// peer name is joined from the nodes table at read time (see BlockEntry.PeerName)
+// so a renamed far-end node shows its current name rather than the one it had
+// when the link was recorded.
 func (s *Store) ListBlocks() ([]BlockEntry, error) {
-	rows, err := s.db.Query(`SELECT kind, key, COALESCE(name,''), COALESCE(reason,''), created_at FROM blocklist ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`
+		SELECT b.kind, b.key, COALESCE(b.name,''), COALESCE(b.reason,''), b.created_at,
+		       COALESCE(b.peer,''), COALESCE(n.name,'')
+		FROM blocklist b
+		LEFT JOIN nodes n ON UPPER(n.pubkey) = b.peer
+		ORDER BY b.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +233,7 @@ func (s *Store) ListBlocks() ([]BlockEntry, error) {
 	out := []BlockEntry{}
 	for rows.Next() {
 		var e BlockEntry
-		if err := rows.Scan(&e.Kind, &e.Key, &e.Name, &e.Reason, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.Kind, &e.Key, &e.Name, &e.Reason, &e.CreatedAt, &e.Peer, &e.PeerName); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

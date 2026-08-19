@@ -54,32 +54,6 @@
 		return () => clearInterval(t);
 	});
 
-	// Admin-only: retire a decommissioned observer. Withdraws it from the
-	// observers page and keeps every packet it reported, so its history stays
-	// attributable. Reversible, and it survives the broker replaying the
-	// observer's retained /status — which is what used to resurrect observers
-	// that had merely been deleted.
-	let retiring = $state(false);
-	async function retireObserver() {
-		if (
-			!(await confirmer.ask({
-				title: `Retire observer "${observer?.name ?? id}"?`,
-				message:
-					'Removes it from the observers page. Every packet it reported is kept, and stays attributed to it in history. You can un-retire it later.',
-				confirmLabel: 'Retire observer'
-			}))
-		)
-			return;
-		retiring = true;
-		try {
-			await admin.retireObserver(auth.csrf, id);
-			goto('/observers');
-		} catch (e) {
-			retiring = false;
-			await confirmer.tell({ title: 'Retire failed', message: (e as Error).message });
-		}
-	}
-
 	// Admin-only: permanently delete the observer AND every packet it reported.
 	let deleting = $state(false);
 	async function deleteObserver() {
@@ -87,7 +61,7 @@
 			!(await confirmer.ask({
 				title: `Delete observer "${observer?.name ?? id}"?`,
 				message:
-					'This permanently removes the observer, every packet it reported, and its battery/noise history. This cannot be undone. To take it off this page but keep its history, use Retire instead.',
+					'This permanently removes the observer, every packet it reported, and its battery/noise history. This cannot be undone. To stop it contributing new data while keeping its history, use Standby instead.',
 				confirmLabel: 'Delete observer',
 				danger: true
 			}))
@@ -207,19 +181,12 @@
 		{/if}
 		<StandbyBadge {observer} compact />
 		<WindowToggle options={windows} bind:value={windowSec} />
-		<StandbyControl {observer} {id} disabled={retiring || deleting} onchange={refresh} />
+		<StandbyControl {observer} {id} disabled={deleting} onchange={refresh} />
 		{#if auth.isAdmin}
-			<Tooltip text="Withdraw this observer from the observers page but keep every packet it reported. Reversible.">
-				<button
-					onclick={retireObserver}
-					disabled={retiring || deleting}
-					class="border-fg-faint/40 text-fg-dim hover:bg-fg-faint/10 hover:text-fg rounded-[var(--radius)] border px-3 py-1 text-xs font-600 transition-colors disabled:opacity-50"
-				>{retiring ? 'Retiring…' : 'Retire observer'}</button>
-			</Tooltip>
-			<Tooltip text="Permanently delete this observer AND every packet it reported. Prefer Retire for a receiver that has simply left the network.">
+			<Tooltip text="Permanently delete this observer AND every packet it reported. Prefer Standby if you only want it to stop contributing data.">
 				<button
 					onclick={deleteObserver}
-					disabled={retiring || deleting}
+					disabled={deleting}
 					class="border-coral/40 text-coral hover:bg-coral/15 rounded-[var(--radius)] border px-3 py-1 text-xs font-600 transition-colors disabled:opacity-50"
 				>{deleting ? 'Deleting…' : 'Delete observer'}</button>
 			</Tooltip>

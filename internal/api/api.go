@@ -185,9 +185,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/block", s.requireAdminUser(s.adminUnblock))
 	mux.HandleFunc("POST /api/admin/purge", s.requireAdminUser(s.adminPurge))
 	mux.HandleFunc("POST /api/admin/delete", s.requireAdminUser(s.adminDelete))
-	mux.HandleFunc("GET /api/admin/observers/retired", s.requireAdminUser(s.adminRetiredObservers))
-	mux.HandleFunc("POST /api/admin/observers/retire", s.requireAdminUser(s.adminRetireObserver))
-	mux.HandleFunc("POST /api/admin/observers/unretire", s.requireAdminUser(s.adminUnretireObserver))
 	mux.HandleFunc("POST /api/admin/observers/standby", s.requireAdminUser(s.adminStandbyObserver))
 	mux.HandleFunc("POST /api/admin/observers/resume", s.requireAdminUser(s.adminResumeObserver))
 

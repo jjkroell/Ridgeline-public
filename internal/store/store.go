@@ -318,10 +318,12 @@ func Open(path string) (*Store, error) {
 	// The observer's friendly name is a label, not its identity — see
 	// migrateObserversToPubkey, run at the end of migrate().
 	db.Exec(`ALTER TABLE observers ADD COLUMN name TEXT`)
-	// Retiring an observer hides it from the observers page without touching the
-	// packets it reported — a decommissioned receiver stops being presented as
-	// part of the network while its history stays attributable to it. NULL means
-	// active; a retirement stamps the RFC3339 time it was retired.
+	// observers.retired_at is RETIRED ITSELF (v0.9.9). Observer retirement was
+	// removed in favour of standby + delete: hiding a receiver while continuing to
+	// ingest everything it reported turned out to be the opposite of what it was
+	// reached for. The column is still created because migrateObserversToPubkey
+	// carries it through a merge, but nothing reads it any more — and it is
+	// cleared once below so no observer stays hidden by state no UI can reach.
 	db.Exec(`ALTER TABLE observers ADD COLUMN retired_at TEXT`)
 	// Standby suspends INGEST for an observer while leaving it connected and
 	// visible: its /status keeps flowing (so it still reports online with live
@@ -330,6 +332,11 @@ func Open(path string) (*Store, error) {
 	// the status upsert never touches this column, so a retained /status replay
 	// cannot return an observer to service behind the operator's back.
 	db.Exec(`ALTER TABLE observers ADD COLUMN standby_since TEXT`)
+	// blocklist.peer records the far side of a SANCTIONED bridge (kind='known'):
+	// the neighbour it carries traffic to, so the console can show the link as
+	// "this node -> that node" instead of naming only one end. Uppercase pubkey,
+	// NULL when the operator hasn't said (or the entry isn't a known bridge).
+	db.Exec(`ALTER TABLE blocklist ADD COLUMN peer TEXT`)
 	// User account status columns (added after the initial users table shipped).
 	db.Exec(`ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE users ADD COLUMN protected INTEGER NOT NULL DEFAULT 0`)
@@ -362,6 +369,13 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// One-time release of any observer still held by the removed retirement
+	// feature. Runs after the pubkey merge so a retirement carried through that
+	// merge is cleared too. Without this an observer retired before the upgrade
+	// would keep a value in a column no code reads and no screen can clear —
+	// harmless today, but exactly the kind of invisible state that turns into a
+	// mystery later. Idempotent.
+	db.Exec(`UPDATE observers SET retired_at = NULL WHERE retired_at IS NOT NULL`)
 	s := &Store{db: db, needAdvertTxBackfill: needAdvertTxBackfill}
 	if err := s.loadBlocklist(); err != nil {
 		db.Close()
@@ -394,20 +408,6 @@ func (s *Store) UpsertObserverStatus(id, name, region, pubkey, statusJSON, radio
 			region         = COALESCE(NULLIF(excluded.region,''), observers.region),
 			pubkey         = COALESCE(NULLIF(excluded.pubkey,''), observers.pubkey)`,
 		id, name, region, pubkey, receivedAt, receivedAt, statusJSON, receivedAt, radio)
-	return err
-}
-
-// RetireObserver hides an observer from the observers page without deleting
-// anything it reported. Retiring KEEPS the row on purpose: a retained /status
-// message replayed by the broker takes the ON CONFLICT branch of
-// UpsertObserverStatus and leaves retired_at alone, so the observer stays
-// hidden. Deleting the row instead would let that same replay re-INSERT it with
-// a fresh first_seen/last_seen — which is exactly how decommissioned observers
-// used to keep coming back.
-func (s *Store) RetireObserver(id, at string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.Exec(`UPDATE observers SET retired_at = ? WHERE id = ?`, at, id)
 	return err
 }
 
@@ -488,14 +488,6 @@ func (s *Store) WriteAudit(at string, actorID int64, actorEmail, action, target,
 	return err
 }
 
-// UnretireObserver returns a retired observer to the observers page.
-func (s *Store) UnretireObserver(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.Exec(`UPDATE observers SET retired_at = NULL WHERE id = ?`, id)
-	return err
-}
-
 // UpdateObserverStatusIfPresent refreshes an existing observer's status without
 // ever creating a row, and reports whether one was updated.
 //
@@ -533,20 +525,16 @@ func (s *Store) UpdateObserverStatusIfPresent(id, name, region, pubkey, statusJS
 // re-creates the row), so this only clears observers that have genuinely gone
 // silent.
 //
-// Retired observers are skipped: their row is deliberately kept so replayed
-// retained status messages can't re-INSERT them (see RetireObserver), and
-// sweeping it away would undo the retirement.
-//
-// Observers on STANDBY are skipped for the same reason. RecordStandbyDrop keeps
-// their last_seen current while they are still being heard, so a live one never
-// reaches the cutoff anyway — but one that goes off the air DURING a stand-down
-// would, and deleting the row would silently discard the operator's stand-down
-// along with it. A held row is held.
+// Observers on STANDBY are skipped. RecordStandbyDrop keeps their last_seen
+// current while they are still being heard, so a live one never reaches the
+// cutoff anyway — but one that goes off the air DURING a stand-down would, and
+// deleting the row would silently discard the operator's stand-down along with
+// it. A held row is held.
 func (s *Store) DeleteStaleObservers(cutoff string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT id FROM observers WHERE last_seen < ? AND retired_at IS NULL AND standby_since IS NULL`, cutoff)
+	rows, err := s.db.Query(`SELECT id FROM observers WHERE last_seen < ? AND standby_since IS NULL`, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +554,7 @@ func (s *Store) DeleteStaleObservers(cutoff string) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	if _, err := s.db.Exec(`DELETE FROM observers WHERE last_seen < ? AND retired_at IS NULL AND standby_since IS NULL`, cutoff); err != nil {
+	if _, err := s.db.Exec(`DELETE FROM observers WHERE last_seen < ? AND standby_since IS NULL`, cutoff); err != nil {
 		return nil, err
 	}
 	return ids, nil

@@ -80,12 +80,9 @@ export interface Observer {
 	/** Latest self-reported device telemetry from the observer's /status message. */
 	status?: ObserverStatus;
 	lastStatusAt?: string;
-	/** Set once retired (decommissioned). Retired observers are omitted from the
-	 *  observers list; their packets stay attributed to them. */
-	retiredAt?: string;
 	/** Set while the observer is on standby: still connected and still listed,
-	 *  but every packet it publishes is discarded at ingest. Unlike retiredAt this
-	 *  does NOT hide it — being able to see the stand-down is the point. */
+	 *  but every packet it publishes is discarded at ingest. It does NOT hide it —
+	 *  being able to see the stand-down is the point. */
 	standbySince?: string;
 	/** Packets discarded during the current stand-down, since the daemon last
 	 *  started. A live signal that standby is working, not an audited total. */
@@ -469,11 +466,18 @@ export interface MigrationEvent {
 	viaBridge?: string;
 }
 export interface BlockEntry {
-	kind: string; // observer | bridge | node
+	kind: string; // observer | bridge | node | allow | known
 	key: string;
 	name?: string;
 	reason?: string;
 	createdAt: string;
+	/** Far side of a sanctioned bridge (kind 'known'): the neighbour it carries
+	 *  traffic to, as an uppercase pubkey. A link has two ends; this is the other
+	 *  one. Absent when the operator hasn't said which. */
+	peer?: string;
+	/** peer's current display name, resolved server-side at read time so a rename
+	 *  of the far-end node follows through to the link. */
+	peerName?: string;
 }
 export interface PurgeResult {
 	observations: number;
@@ -499,7 +503,17 @@ export const admin = {
 	 *  kind "allow" dismisses a detection candidate without blocking it. */
 	block: (
 		csrf: string,
-		body: { kind: string; key: string; name?: string; reason?: string; nodes?: string[] }
+		body: {
+			kind: string;
+			key: string;
+			name?: string;
+			reason?: string;
+			nodes?: string[];
+			/** kind 'known' only — the far side of the bridge. */
+			peer?: string;
+			/** Forget a previously recorded peer (an empty `peer` leaves it alone). */
+			clearPeer?: boolean;
+		}
 	) => mutate<{ ok: boolean }>('/api/admin/block', 'POST', csrf, body),
 	unblock: (csrf: string, kind: string, key: string) =>
 		mutate<{ ok: boolean }>(
@@ -515,27 +529,10 @@ export const admin = {
 	deleteNodes: (csrf: string, nodes: string[]) =>
 		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { nodes }),
 	/** Permanently delete observers, every packet they reported, and their device
-	 *  telemetry, with no block. Destructive — prefer `retireObserver` for a
+	 *  telemetry, with no block. Destructive — prefer `standbyObserver` for a
 	 *  receiver that has simply left the network, which keeps its history. */
 	deleteObservers: (csrf: string, observers: string[]) =>
 		mutate<PurgeResult>('/api/admin/delete', 'POST', csrf, { observers }),
-	/** Observers withdrawn from the observers page but whose packets are kept. */
-	retiredObservers: () => get<Observer[]>('/api/admin/observers/retired'),
-	/** Retire a decommissioned observer: hides it from the observers page and
-	 *  keeps every packet it reported. Survives the broker replaying its retained
-	 *  /status, which is what used to bring deleted observers back. Reversible. */
-	retireObserver: (csrf: string, observer: string) =>
-		mutate<{ observer: string; retired: boolean }>('/api/admin/observers/retire', 'POST', csrf, {
-			observer
-		}),
-	/** Return a retired observer to the observers page. */
-	unretireObserver: (csrf: string, observer: string) =>
-		mutate<{ observer: string; retired: boolean }>(
-			'/api/admin/observers/unretire',
-			'POST',
-			csrf,
-			{ observer }
-		),
 	/** Stand an observer down: it stays connected and listed, and every packet it
 	 *  publishes is discarded at ingest until it is returned to service. Nothing
 	 *  already stored changes, and nothing discarded meanwhile is recoverable. */

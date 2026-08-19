@@ -4,6 +4,42 @@ All notable changes to Ridgeline (the public, self-hostable build) are documente
 here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [v0.9.9] — 2026-08-19
+
+### Removed
+- **Retiring an observer is gone.** An observer is now in service, on standby, or
+  deleted. Retiring only hid a receiver from the observers page — it never
+  stopped ingesting anything that receiver reported, which is the opposite of
+  what it kept being reached for. Standby is the control that actually stops the
+  feed, so the ambiguous one has been removed along with the Retired Observers
+  panel. An observer retired before this release is released automatically on
+  upgrade; nothing it reported is affected.
+
+### Added
+- **A known bridge now records which node it is bridged to.** A bridge is a link,
+  but detection only ever names the near end — the relay whose behaviour gave it
+  away. Marking one as known now asks which node sits on the far side, offering
+  that node's observed neighbours busiest-first with shared-packet counts, and
+  the Known Bridges list reads **`near → far`** instead of naming one end. You
+  can still mark a bridge known without naming a peer, and rename either end
+  without breaking the record.
+- **The members list collapses**, and starts collapsed. It grows without bound on
+  a busy site and was pushing the detection and bridge sections — the reason the
+  page gets opened — below the fold. Your choice is remembered per browser.
+
+### Changed
+- **The Quarantine list is now two lists: Blocked and Dismissed.** They do
+  opposite things. Blocked traffic is dropped at ingest and hidden from the site;
+  a dismissed node is one you've confirmed is *not* a bridge, so it's excluded
+  from detection and nothing about it is blocked. Filing both under "Quarantine"
+  was wrong for every dismissed row. The actions now read *unblock* and *restore*
+  rather than "release" for both.
+
+### Fixed
+- **On mobile, the Purged section and the members list were invisible unless
+  something was quarantined.** The quarantine block wrapped both, so an admin
+  with an empty quarantine list could not reach either.
+
 ## [v0.9.8] — 2026-08-16
 
 ### Added

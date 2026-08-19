@@ -118,7 +118,7 @@
 			</div>
 		{/if}
 
-		<div class="mb-3"><StandbyControl {observer} {id} onchange={refresh} /></div>
+		<StandbyControl {observer} {id} block onchange={refresh} />
 
 		<!-- window -->
 		<div class="mb-3 flex gap-2">
