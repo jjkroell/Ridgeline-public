@@ -142,7 +142,9 @@
 						href="/nodes/{n.publicKey}"
 						class="panel-hover grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-5 py-3 md:grid-cols-[1.4fr_120px_1fr_80px_70px_70px] {n.gpsSuspect
 							? 'border-amber/60 bg-amber/[0.07] border-l-2'
-							: ''}"
+							: n.viaBridge
+								? 'border-violet/60 bg-violet/[0.06] border-l-2'
+								: ''}"
 					>
 						<div class="min-w-0">
 							<div class="flex items-center gap-1.5">
@@ -156,11 +158,29 @@
 										</svg>
 									</Tooltip>
 								{/if}
-								<span class="text-fg truncate font-medium">{n.name || shortKey(n.publicKey)}</span>
+								<!-- A node on the far side of a bridge is a different KIND of row, not a
+								     worse one, so it is marked by recolouring what is already there rather
+								     than adding another object to a dense line. Colour alone would be a
+								     weak signal (and invisible to some readers), so the frequency is
+								     spelled out in the metadata line underneath — colour to scan by, text
+								     to read. -->
+								<!-- Two channels on purpose. The rail groups the ROW; the name colour
+								     survives when a GPS-suspect row takes the rail amber, so a node that
+								     is both still reads as off-segment. Colour is the scanning cue, the
+								     frequency underneath is the readable one. -->
+								<span
+									class="truncate font-medium {n.viaBridge ? 'text-violet' : 'text-fg'}"
+									title={n.viaBridge
+										? `On a different frequency — reached through the ${n.viaBridgeName || 'bridge'} link`
+										: undefined}
+									>{n.name || shortKey(n.publicKey)}</span
+								>
 								{#if n.claimed}<ClaimedBadge pubkey={n.publicKey} size="md" />{/if}
 							</div>
 							<div class="font-mono text-fg-faint mt-0.5 text-[0.68rem]">
-								{shortKey(n.publicKey, 10, 4)}
+								{shortKey(n.publicKey, 10, 4)}{#if n.viaBridge}<span class="text-violet/80"
+										> · {n.viaBridgeRadio ? n.viaBridgeRadio.split(',')[0] + ' MHz' : 'off-segment'}</span
+									>{/if}
 							</div>
 						</div>
 						<div class="hidden md:block"><RoleBadge role={n.role} /></div>

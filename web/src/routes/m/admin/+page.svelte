@@ -79,11 +79,11 @@
 
 	function markKnown(b: BridgeCandidate) { knownPicker = b; }
 
-	async function confirmKnown(peer: string) {
+	async function confirmKnown(peer: string, peerRadio: string) {
 		const b = knownPicker;
 		if (!b) return;
 		busy = b.nodeKey; msg = '';
-		try { await admin.block(auth.csrf, { kind: 'known', key: b.nodeKey, name: b.name, reason: 'known bridge', peer, clearPeer: peer === '' }); await refreshBlocks(); knownPicker = null; msg = peer ? `${b.name} marked as a known bridge, linked to its peer.` : `${b.name} marked as a known bridge.`; }
+		try { await admin.block(auth.csrf, { kind: 'known', key: b.nodeKey, name: b.name, reason: 'known bridge', peer, clearPeer: peer === '', peerRadio: peerRadio || undefined }); await refreshBlocks(); knownPicker = null; msg = peer ? `${b.name} marked as a known bridge, linked to its peer.` : `${b.name} marked as a known bridge.`; }
 		catch (e) { msg = `mark known: ${(e as Error).message}`; } finally { busy = ''; }
 	}
 	async function dismissBridge(b: BridgeCandidate) {

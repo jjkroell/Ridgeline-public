@@ -30,6 +30,17 @@ export interface Node {
 	retiredAt?: string;
 	/** Coordinates are a statistical outlier — likely corrupt GPS. */
 	gpsSuspect?: boolean;
+	/** Set when this node is reachable only ACROSS a sanctioned bridge — it lives
+	 *  on a radio segment this deployment cannot hear directly. Uppercase pubkey
+	 *  of the bridge's near end. */
+	viaBridge?: string;
+	viaBridgeName?: string;
+	/** The far segment's radio config, DECLARED by the operator — it cannot be
+	 *  observed, and the node's own `radio` is blanked because it would describe a
+	 *  receiver on this side of the bridge. */
+	viaBridgeRadio?: string;
+	/** 'confirmed' (>=2-byte path hops proved it) or 'probable' (1-byte path). */
+	viaBridgeConfidence?: string;
 	/** "freq,bw,sf,cr" config, inherited from the observer that heard it. */
 	radio?: string;
 	/** Most recent time this node relayed a packet (within the analytics window). */
@@ -513,6 +524,9 @@ export const admin = {
 			peer?: string;
 			/** Forget a previously recorded peer (an empty `peer` leaves it alone). */
 			clearPeer?: boolean;
+			/** kind 'known' only — the far segment's "freq,bw,sf,cr", which cannot be
+			 *  observed and must be declared. Send '-' to clear. */
+			peerRadio?: string;
 		}
 	) => mutate<{ ok: boolean }>('/api/admin/block', 'POST', csrf, body),
 	unblock: (csrf: string, kind: string, key: string) =>

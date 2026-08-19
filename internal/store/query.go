@@ -39,7 +39,23 @@ type Node struct {
 	GpsSuspect bool `json:"gpsSuspect"`
 	// Radio is the node's "freq,bw,sf,cr" config, inherited from the observer
 	// that heard it (nodes don't broadcast their own). Empty until known.
+	//
+	// ⚠ For a node beyond a bridge this describes a receiver on THIS side and is
+	// therefore wrong for the node. The API blanks it whenever ViaBridge is set
+	// and reports ViaBridgeRadio instead.
 	Radio string `json:"radio,omitempty"`
+	// ViaBridge is the uppercase pubkey of the sanctioned bridge this node is
+	// reached through — set only when the node lives on the far segment, i.e. it
+	// is never heard directly and essentially all of its traffic crosses.
+	ViaBridge string `json:"viaBridge,omitempty"`
+	// ViaBridgeName / ViaBridgeRadio are resolved for display: the bridge's near
+	// end, and the far segment's OPERATOR-DECLARED radio config (unobservable —
+	// nothing on this side can hear the far side's settings).
+	ViaBridgeName  string `json:"viaBridgeName,omitempty"`
+	ViaBridgeRadio string `json:"viaBridgeRadio,omitempty"`
+	// ViaBridgeConfidence is "confirmed" (>=2-byte path hops proved the crossing)
+	// or "probable" (a 1-byte path, where only the far end's byte is unique).
+	ViaBridgeConfidence string `json:"viaBridgeConfidence,omitempty"`
 }
 
 // gpsFloorKm is the radius around the mesh centroid inside which a node is
@@ -148,7 +164,8 @@ func (s *Store) ListNodes() ([]Node, error) {
 		SELECT pubkey, COALESCE(name,''), COALESCE(role,''),
 		       latitude, longitude, has_location,
 		       first_seen, last_seen, COALESCE(last_advert,''), advert_count, advert_tx_count,
-		       COALESCE(hash_size, 0), COALESCE(radio,''), COALESCE(retired_at,'')
+		       COALESCE(hash_size, 0), COALESCE(radio,''), COALESCE(retired_at,''),
+		       COALESCE(via_bridge,''), COALESCE(via_bridge_conf,'')
 		FROM nodes
 		ORDER BY last_seen DESC`)
 	if err != nil {
@@ -162,7 +179,8 @@ func (s *Store) ListNodes() ([]Node, error) {
 		var hasLoc int
 		if err := rows.Scan(&n.PublicKey, &n.Name, &n.Role,
 			&n.Latitude, &n.Longitude, &hasLoc,
-			&n.FirstSeen, &n.LastSeen, &n.LastAdvert, &n.AdvertCount, &n.AdvertTxCount, &n.HashSize, &n.Radio, &n.RetiredAt); err != nil {
+			&n.FirstSeen, &n.LastSeen, &n.LastAdvert, &n.AdvertCount, &n.AdvertTxCount, &n.HashSize, &n.Radio, &n.RetiredAt,
+			&n.ViaBridge, &n.ViaBridgeConfidence); err != nil {
 			return nil, err
 		}
 		n.HasLocation = hasLoc != 0
@@ -172,7 +190,51 @@ func (s *Store) ListNodes() ([]Node, error) {
 		return nil, err
 	}
 	flagGpsOutliers(nodes)
+	if err := s.annotateBridgeSegments(nodes); err != nil {
+		return nil, err
+	}
 	return nodes, nil
+}
+
+// annotateBridgeSegments fills in the display fields for nodes beyond a bridge
+// and BLANKS their inherited radio.
+//
+// nodes.radio is copied from whichever observer heard the node. For a far-side
+// node that observer is on this side of the bridge, so the value describes the
+// listener and is simply wrong for the node — reporting it would state a
+// falsehood with more confidence than reporting nothing. The operator-declared
+// far-segment config replaces it, and is absent until they declare one.
+func (s *Store) annotateBridgeSegments(nodes []Node) error {
+	var any bool
+	for i := range nodes {
+		if nodes[i].ViaBridge != "" {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return nil
+	}
+	links, err := s.KnownBridgeLinks()
+	if err != nil {
+		return err
+	}
+	byNear := make(map[string]BridgeLink, len(links))
+	for _, l := range links {
+		byNear[l.Near] = l
+	}
+	for i := range nodes {
+		key := nodes[i].ViaBridge
+		if key == "" {
+			continue
+		}
+		nodes[i].Radio = ""
+		if l, ok := byNear[key]; ok {
+			nodes[i].ViaBridgeName = l.NearName
+			nodes[i].ViaBridgeRadio = l.PeerRadio
+		}
+	}
+	return nil
 }
 
 // Stats returns counts and the most recent packet time.

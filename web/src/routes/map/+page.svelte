@@ -15,7 +15,7 @@
 	import CopyMapLink from '$lib/components/CopyMapLink.svelte';
 	import { parseMapView, hasMapView, shareUrl } from '$lib/map-share';
 	import { ensureHillshade } from '$lib/map-hillshade';
-	import { isLight, inkColor, ROLE_HEX, FAV_COLOR, locatedNodes } from '$lib/map-util';
+	import { isLight, inkColor, ROLE_HEX, FAV_COLOR, SEGMENT_COLOR, locatedNodes } from '$lib/map-util';
 	import { computeCoverage, covered, distKm, type CoverageResult } from '$lib/coverage';
 	import { MAP_CENTER_LONLAT } from '$lib/site';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -145,6 +145,8 @@
 					name: n.name || n.publicKey.slice(0, 10),
 					roleLabel: roleLabel(n.role),
 					pubkey: n.publicKey,
+					// Marks a node beyond a sanctioned bridge so the dot can carry a ring.
+					offSegment: !!n.viaBridge,
 					fav: favorites.has(n.publicKey)
 				}
 			}))
@@ -286,8 +288,8 @@
 					15, ['match', ['get', 'role'], 'Repeater', 8, 5.5]
 				],
 				'circle-opacity': 0.9,
-				'circle-stroke-width': 1,
-				'circle-stroke-color': inkColor()
+				'circle-stroke-width': ['case', ['get', 'offSegment'], 2, 1],
+				'circle-stroke-color': ['case', ['get', 'offSegment'], SEGMENT_COLOR, inkColor()]
 			}
 		});
 	}

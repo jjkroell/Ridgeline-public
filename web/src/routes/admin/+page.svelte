@@ -130,7 +130,7 @@
 		knownPicker = b;
 	}
 
-	async function confirmKnown(peer: string) {
+	async function confirmKnown(peer: string, peerRadio: string) {
 		const b = knownPicker;
 		if (!b) return;
 		busy = b.nodeKey;
@@ -143,7 +143,8 @@
 				reason: 'known bridge',
 				peer,
 				// An empty peer normally means "leave alone"; here the operator chose it.
-				clearPeer: peer === ''
+				clearPeer: peer === '',
+				peerRadio: peerRadio || undefined
 			});
 			await refreshBlocks();
 			knownPicker = null;

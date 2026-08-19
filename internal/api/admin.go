@@ -56,6 +56,11 @@ type blockReq struct {
 	// clearPeer to forget it.
 	Peer      string `json:"peer,omitempty"`
 	ClearPeer bool   `json:"clearPeer,omitempty"`
+	// PeerRadio is the far segment's "freq,bw,sf,cr", declared by the operator.
+	// It cannot be observed: nothing on this side hears the far side's radio, and
+	// a far-side node's own radio field is inherited from a listener over HERE.
+	// Sent as "-" to clear.
+	PeerRadio string `json:"peerRadio,omitempty"`
 }
 
 func (s *Server) adminBlock(w http.ResponseWriter, r *http.Request, _ store.User) {
@@ -80,6 +85,20 @@ func (s *Server) adminBlock(w http.ResponseWriter, r *http.Request, _ store.User
 	}
 	if req.ClearPeer && req.Peer == "" {
 		if err := s.store.ClearBlockPeer(req.Kind, req.Key); err != nil {
+			s.fail(w, err)
+			return
+		}
+	}
+	if req.PeerRadio != "" {
+		if req.Kind != store.BlockKnown {
+			writeErr(w, http.StatusBadRequest, "peerRadio is only valid for kind=known")
+			return
+		}
+		radio := req.PeerRadio
+		if radio == "-" {
+			radio = ""
+		}
+		if err := s.store.SetBridgePeerRadio(req.Key, radio); err != nil {
 			s.fail(w, err)
 			return
 		}

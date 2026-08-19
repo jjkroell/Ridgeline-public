@@ -28,6 +28,17 @@ export const ROLE_HEX: Record<string, string> = {
 export const FAV_COLOR = '#e8b454';
 
 /**
+ * Violet ring drawn around nodes that sit beyond a sanctioned bridge — on a
+ * radio segment nothing here listens to.
+ *
+ * A RING rather than a fill on purpose: the fill already carries the node's
+ * role, and both facts matter. This mirrors the node list, where the row rail
+ * marks the segment and the role badge is left alone. Kept in sync with
+ * --color-violet in app.css (MapLibre paint can't read CSS custom properties).
+ */
+export const SEGMENT_COLOR = '#a78bfa';
+
+/**
  * Nodes with valid, non-suspect coordinates — the set safe to plot.
  *
  * The 0,0 check mirrors the server's validCoords: null island is what a node

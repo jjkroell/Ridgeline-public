@@ -30,8 +30,9 @@
 		nodeKey: string;
 		nodeName: string;
 		compact?: boolean;
-		/** peer is '' when the operator marks it known without naming a far side. */
-		onconfirm: (peer: string) => void | Promise<void>;
+		/** peer is '' when the operator marks it known without naming a far side.
+		 *  peerRadio is the far segment's "freq,bw,sf,cr", '' when not declared. */
+		onconfirm: (peer: string, peerRadio: string) => void | Promise<void>;
 		oncancel: () => void;
 	} = $props();
 
@@ -39,6 +40,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let selected = $state('');
+	let peerRadio = $state('');
 	let saving = $state(false);
 
 	$effect(() => {
@@ -68,7 +70,7 @@
 	async function confirm() {
 		saving = true;
 		try {
-			await onconfirm(selected);
+			await onconfirm(selected, peerRadio.trim());
 		} finally {
 			saving = false;
 		}
@@ -116,6 +118,24 @@
 				{/each}
 			</div>
 		{/if}
+	</div>
+
+	<!-- The far segment's radio config cannot be observed: every receiver is on
+	     THIS side, and a far-side node's own radio field is inherited from a
+	     listener over here. Declaring it is the only honest source, so it is asked
+	     for at the moment the link is recorded. -->
+	<div class="border-line/70 border-t px-5 py-3">
+		<label class="label mb-1.5 block" for="peer-radio">Far-side radio (optional)</label>
+		<input
+			id="peer-radio"
+			bind:value={peerRadio}
+			placeholder="915.000,62.5,8,5"
+			class="border-line bg-panel-2/40 text-fg placeholder:text-fg-faint w-full rounded-[var(--radius)] border px-3 py-1.5 font-mono text-xs"
+		/>
+		<p class="text-fg-faint mt-1.5 text-[0.62rem]">
+			freq,bw,sf,cr — shown on every node found beyond this bridge. Nothing here
+			can hear the far side, so this can only be declared, never measured.
+		</p>
 	</div>
 
 	<div class="border-line/70 flex items-center gap-3 border-t px-5 py-3.5">

@@ -132,6 +132,7 @@ func run(log *slog.Logger, configPath string) error {
 	go runAnalytics(ctx, engine, st, log)
 	go runHashSizeConsensus(ctx, st, log)
 	go runRetention(ctx, st, log)
+	go runSegmentSweep(ctx, st, log)
 	go runSessionPrune(ctx, st, log)
 	go runClaimPrune(ctx, st, log)
 	if cfg.NodeRetentionDays > 0 {
@@ -306,6 +307,69 @@ func runClaimPrune(ctx context.Context, st *store.Store, log *slog.Logger) {
 			return
 		case <-t.C:
 			prune()
+		}
+	}
+}
+
+// segmentSweepInterval is how often far-side membership is recomputed, and
+// segmentWindow is how far back each sweep looks.
+//
+// The window is a deliberate compromise. Too short and a quiet far-side node
+// falls out of its own segment between adverts; too long and it reaches back
+// past the day the bridge was installed, when the bridge's two ends were
+// ordinary RF relays and transiting them meant nothing about segments. Three
+// days was enough on the live mesh for every far-side node to score 100% while
+// staying clear of a bridge that had been in place for less than four.
+const (
+	segmentSweepInterval = 30 * time.Minute
+	segmentWindow        = 72 * time.Hour
+	segmentScanCap       = 250000
+)
+
+// runSegmentSweep keeps nodes.via_bridge in agreement with recent traffic:
+// which nodes are reachable only across a sanctioned bridge, and therefore live
+// on a radio segment this deployment cannot hear directly. No-ops when no
+// sanctioned bridge has a peer recorded — a link needs both ends to define a
+// segment.
+func runSegmentSweep(ctx context.Context, st *store.Store, log *slog.Logger) {
+	sweep := func() {
+		links, err := st.KnownBridgeLinks()
+		if err != nil {
+			log.Warn("segment sweep: bridge links", "err", err)
+			return
+		}
+		if len(links) == 0 {
+			return
+		}
+		nodes, err := st.ListNodes()
+		if err != nil {
+			log.Warn("segment sweep: list nodes", "err", err)
+			return
+		}
+		since := time.Now().Add(-segmentWindow).UTC().Format(time.RFC3339Nano)
+		rep, err := analytics.DetectSegments(st, nodes, links, since, segmentScanCap)
+		if err != nil {
+			log.Warn("segment sweep: detect", "err", err)
+			return
+		}
+		n, err := st.ApplySegments(rep.Members)
+		if err != nil {
+			log.Warn("segment sweep: apply", "err", err)
+			return
+		}
+		log.Info("segment sweep: far-side nodes",
+			"bridges", len(links), "marked", n, "scanned", rep.Scanned,
+			"crossings", rep.Crossings, "reverse", rep.Reverse, "rejected", len(rep.Rejected))
+	}
+	sweep()
+	t := time.NewTicker(segmentSweepInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			sweep()
 		}
 	}
 }

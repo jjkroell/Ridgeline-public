@@ -193,7 +193,18 @@
 		};
 		const avgSnr = { k: 'Avg SNR', v: detail?.avgSnr != null ? detail.avgSnr.toFixed(1) + ' dB' : '—' };
 		const location = { k: 'Location', v: fmtCoord(node.latitude, node.longitude) };
-		const radio = { k: 'Radio', v: fmtRadio(node.radio) };
+		// A far-side node's own radio is blanked server-side (it described a
+		// receiver on THIS side of the bridge). Show the operator-declared config
+		// for the far segment instead, labelled so it is never mistaken for
+		// something the node reported.
+		const radio = node.viaBridge
+			? {
+					k: 'Radio',
+					v: node.viaBridgeRadio
+						? fmtRadio(node.viaBridgeRadio)
+						: 'unknown — far side of a bridge'
+				}
+			: { k: 'Radio', v: fmtRadio(node.radio) };
 		// Clock health from the timestamp the node stamps into its adverts.
 		const driftColor = { ok: 'var(--color-fg)', warn: 'var(--color-amber)', bad: 'var(--color-coral)' };
 		const clock = detail?.clockUnset
@@ -373,7 +384,9 @@
 	{#if heading}
 		<div class="mb-5 flex flex-wrap items-center gap-3">
 			<FavoriteStar {pubkey} />
-			<h2 class="font-display text-fg text-2xl font-700 tracking-tight">
+			<h2
+				class="font-display text-2xl font-700 tracking-tight {node.viaBridge ? 'text-violet' : 'text-fg'}"
+			>
 				{node.name || shortKey(pubkey, 8, 4)}
 			</h2>
 			<RoleBadge role={node.role} />
@@ -389,6 +402,41 @@
 			<span class="label ml-auto shrink-0 {copied ? '!text-signal' : ''}">{copied ? 'COPIED' : 'COPY'}</span>
 		</button>
 	</div>
+
+	<!-- Off-segment callout. This is the ONE place that says the far-side radio is
+	     DECLARED rather than measured: the Radio row below states the figure plainly
+	     (that reads better), so the caveat needs a home of its own or it is lost. -->
+	{#if node.viaBridge}
+		<div class="border-violet/40 bg-violet/5 mb-5 rounded-[var(--radius)] border px-5 py-3.5">
+			<div class="text-violet flex items-center gap-2 text-sm font-600">
+				<span class="bg-violet inline-block h-2 w-2 rounded-full"></span>
+				{node.viaBridgeRadio ? `On ${node.viaBridgeRadio.split(',')[0]} MHz` : 'On another frequency'}
+				{#if node.viaBridgeConfidence === 'probable'}
+					<span class="label !text-violet/70 normal-case">probable</span>
+				{/if}
+			</div>
+			<!-- Plain language on purpose. Whoever lands here wants to know why this node
+			     looks different, not how the detection works: no "segment", no byte
+			     widths, no "declared". The mechanism is still in the code comments and
+			     the changelog for anyone who goes looking. -->
+			<div class="text-fg-dim mt-1.5 text-xs">
+				This node runs on a different frequency, so none of our receivers can hear it
+				directly. Everything we know about it arrives through the
+				<span class="text-fg">{node.viaBridgeName || 'bridge'}</span> link, which passes traffic
+				between the two frequencies.
+				{#if node.viaBridgeRadio}
+					The frequency shown was typed in when that link was set up — there's no way to
+					check it from this side.
+				{:else}
+					Nobody has recorded which frequency that side uses yet.
+				{/if}
+				{#if node.viaBridgeConfidence === 'probable'}
+					It's also a good guess rather than a certainty: the traces this node leaves behind
+					are short, so they could belong to another node.
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Node Admin: claim, private location, notes — each in its own modal -->
 	<div class="mb-5">

@@ -337,6 +337,19 @@ func Open(path string) (*Store, error) {
 	// "this node -> that node" instead of naming only one end. Uppercase pubkey,
 	// NULL when the operator hasn't said (or the entry isn't a known bridge).
 	db.Exec(`ALTER TABLE blocklist ADD COLUMN peer TEXT`)
+	// peer_radio is the OPERATOR-DECLARED radio config of the far side of a
+	// sanctioned bridge ("freq,bw,sf,cr"). It cannot be observed: with no receiver
+	// on the far side, nothing reports it, and nodes.radio is inherited from
+	// whichever observer heard a node — which for a far-side node is a listener on
+	// THIS side and is therefore wrong. Declaring it here is the only honest source.
+	db.Exec(`ALTER TABLE blocklist ADD COLUMN peer_radio TEXT`)
+	// via_bridge marks a node that is reachable only ACROSS a sanctioned bridge:
+	// the uppercase pubkey of the bridge's near end. Set by the segment sweep, not
+	// by ingest. via_bridge_conf is 'confirmed' (the crossing was proved with
+	// >=2-byte path hops) or 'probable' (a 1-byte path, where only the far end's
+	// byte is unique). NULL means the node is on this side.
+	db.Exec(`ALTER TABLE nodes ADD COLUMN via_bridge TEXT`)
+	db.Exec(`ALTER TABLE nodes ADD COLUMN via_bridge_conf TEXT`)
 	// User account status columns (added after the initial users table shipped).
 	db.Exec(`ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE users ADD COLUMN protected INTEGER NOT NULL DEFAULT 0`)

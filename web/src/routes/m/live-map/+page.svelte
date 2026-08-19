@@ -15,7 +15,7 @@
 	import CopyMapLink from '$lib/components/CopyMapLink.svelte';
 	import { parseMapView, hasMapView, shareUrl } from '$lib/map-share';
 	import { ensureHillshade } from '$lib/map-hillshade';
-	import { ROLE_HEX, locatedNodes } from '$lib/map-util';
+	import { ROLE_HEX, SEGMENT_COLOR, locatedNodes } from '$lib/map-util';
 	import { MAP_CENTER_LONLAT } from '$lib/site';
 	import BasemapSelector from '$lib/components/BasemapSelector.svelte';
 	import FallbackMap from '$lib/components/FallbackMap.svelte';
@@ -59,7 +59,7 @@
 			features: nodes.map((n) => ({
 				type: 'Feature',
 				geometry: { type: 'Point', coordinates: [n.longitude!, n.latitude!] },
-				properties: { color: ROLE_HEX[n.role] ?? '#8394a1', pubkey: n.publicKey }
+				properties: { color: ROLE_HEX[n.role] ?? '#8394a1', pubkey: n.publicKey, offSegment: !!n.viaBridge }
 			}))
 		};
 	}
@@ -160,7 +160,9 @@
 		});
 		map.addLayer({
 			id: 'node-dots', type: 'circle', source: 'nodes',
-			paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 11, 5], 'circle-color': ['get', 'color'], 'circle-opacity': 0.85 }
+			// Role stays the fill; a node beyond a bridge gets a violet ring. These dots
+			// have no stroke by default, so the ring is added only where it means something.
+			paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 11, 5], 'circle-color': ['get', 'color'], 'circle-opacity': 0.85, 'circle-stroke-color': SEGMENT_COLOR, 'circle-stroke-width': ['case', ['get', 'offSegment'], 1.5, 0] }
 		});
 		// Transparent, larger hit target so the small dots are tappable on a phone.
 		map.addLayer({

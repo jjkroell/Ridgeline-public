@@ -16,7 +16,7 @@
 	import CopyMapLink from '$lib/components/CopyMapLink.svelte';
 	import { parseMapView, hasMapView, shareUrl } from '$lib/map-share';
 	import { ensureHillshade } from '$lib/map-hillshade';
-	import { ROLE_HEX, FAV_COLOR, locatedNodes } from '$lib/map-util';
+	import { ROLE_HEX, FAV_COLOR, SEGMENT_COLOR, locatedNodes } from '$lib/map-util';
 	import { computeCoverage, covered, distKm, type CoverageResult } from '$lib/coverage';
 	import { MAP_CENTER_LONLAT } from '$lib/site';
 	import BasemapSelector from '$lib/components/BasemapSelector.svelte';
@@ -116,6 +116,8 @@
 					name: n.name || n.publicKey.slice(0, 10),
 					roleLabel: roleLabel(n.role),
 					pubkey: n.publicKey,
+					// Marks a node beyond a sanctioned bridge so the dot can carry a ring.
+					offSegment: !!n.viaBridge,
 					fav: favorites.has(n.publicKey)
 				}
 			}))
@@ -174,8 +176,9 @@
 			paint: {
 				'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3.5, 11, 7],
 				'circle-color': ['get', 'color'],
-				'circle-stroke-color': 'rgba(0,0,0,0.4)',
-				'circle-stroke-width': 1
+				// Role stays the fill; a node beyond a bridge gets a violet ring.
+				'circle-stroke-color': ['case', ['get', 'offSegment'], SEGMENT_COLOR, 'rgba(0,0,0,0.4)'],
+				'circle-stroke-width': ['case', ['get', 'offSegment'], 2, 1]
 			}
 		});
 		map.on('click', 'node-dots', (e) => {

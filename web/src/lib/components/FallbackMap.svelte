@@ -14,7 +14,7 @@
 	import type { Node } from '$lib/api';
 	import type { CoverageResult } from '$lib/coverage';
 	import { theme } from '$lib/theme.svelte';
-	import { isLight, inkColor, ROLE_HEX, FAV_COLOR, locatedNodes } from '$lib/map-util';
+	import { isLight, inkColor, ROLE_HEX, FAV_COLOR, SEGMENT_COLOR, locatedNodes } from '$lib/map-util';
 	import { favorites } from '$lib/favorites.svelte';
 	import { roleLabel } from '$lib/format';
 	import { live, hashColor } from '$lib/live.svelte';
@@ -171,10 +171,13 @@
 		const d = Math.round(nodeRadius(repeater, zoom) * 2); // match the live circleMarker diameter
 		const color = ROLE_HEX[n.role] ?? '#8394a1';
 		const ring = favorites.has(n.publicKey) ? `box-shadow:0 0 0 2px ${FAV_COLOR};` : '';
+		// Role stays the fill; a node beyond a bridge is ringed violet, matching the
+		// GL maps and the row rail on /nodes.
+		const edge = n.viaBridge ? `2px solid ${SEGMENT_COLOR}` : `1px solid ${stroke}`;
 		return L.divIcon({
 			html:
 				`<div style="width:${d}px;height:${d}px;border-radius:50%;` +
-				`background:${color};border:1px solid ${stroke};${ring}box-sizing:border-box"></div>`,
+				`background:${color};border:${edge};${ring}box-sizing:border-box"></div>`,
 			className: 'rl-node',
 			iconSize: [d, d],
 			iconAnchor: [d / 2, d / 2]
@@ -228,8 +231,8 @@
 			const m = L.circleMarker([lat, lon], {
 				renderer: canvasRenderer,
 				radius: r,
-				color: stroke,
-				weight: 1,
+				color: n.viaBridge ? SEGMENT_COLOR : stroke,
+				weight: n.viaBridge ? 2 : 1,
 				fillColor: color,
 				fillOpacity: 0.9
 			});
