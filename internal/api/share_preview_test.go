@@ -16,6 +16,8 @@ import (
 
 	"github.com/jjkroell/ridgeline/internal/meshcore"
 	"github.com/jjkroell/ridgeline/internal/store"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 	xhtml "golang.org/x/net/html"
 )
 
@@ -109,6 +111,12 @@ func TestSharePreviewInitialHTMLAndPNG(t *testing.T) {
 	if tags["twitter:card"][0] != "summary_large_image" {
 		t.Fatal(tags["twitter:card"])
 	}
+	if !strings.Contains(tags["og:image:alt"][0], key) || !strings.Contains(tags["twitter:image:alt"][0], key) {
+		t.Fatal("full public key missing from accessible image descriptions")
+	}
+	if rr.Header().Get("Cache-Control") != "public, max-age=300, must-revalidate" {
+		t.Fatal("document must revalidate before long-lived image cache")
+	}
 	imageURL, err := url.Parse(tags["og:image"][0])
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +124,9 @@ func TestSharePreviewInitialHTMLAndPNG(t *testing.T) {
 	pngResp := previewRequest(h, "GET", imageURL.RequestURI())
 	if pngResp.Code != 200 || pngResp.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("PNG: %d %s", pngResp.Code, pngResp.Body.String())
+	}
+	if pngResp.Header().Get("Cache-Control") != "public, max-age=86400, must-revalidate" {
+		t.Fatal("identity card should allow a one-day cache")
 	}
 	cfg, err := png.DecodeConfig(pngResp.Body)
 	if err != nil || cfg.Width != 1200 || cfg.Height != 630 {
@@ -141,27 +152,53 @@ func TestSharePreviewInitialHTMLAndPNG(t *testing.T) {
 		t.Fatal("untrusted host in metadata")
 	}
 }
-func TestSharePreviewFreshnessAndVisibility(t *testing.T) {
+func TestSharePreviewStableIdentityAndVisibility(t *testing.T) {
 	st, key, h, _ := shareTestEnv(t)
 	path := "/nodes/" + key
-	before := headTags(t, previewRequest(h, "GET", path).Body.String())["og:image"][0]
+	before := previewRequest(h, "GET", path)
+	imageURL := headTags(t, before.Body.String())["og:image"][0]
+	parsed, err := url.Parse(imageURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforePNG := previewRequest(h, "GET", parsed.RequestURI())
 	pkt, _ := meshcore.DecodeHex(claimAdvertHex)
 	if err := st.Record(store.Observation{Packet: pkt, RawHex: claimAdvertHex, ReceivedAt: time.Date(2026, 9, 11, 1, 0, 0, 0, time.UTC)}); err != nil {
 		t.Fatal(err)
 	}
-	after := headTags(t, previewRequest(h, "GET", path).Body.String())["og:image"][0]
-	if before == after {
-		t.Fatal("image revision didn't change with observation")
+	after := previewRequest(h, "GET", path)
+	if !bytes.Equal(before.Body.Bytes(), after.Body.Bytes()) || before.Header().Get("ETag") != after.Header().Get("ETag") {
+		t.Fatal("new observations must not invalidate identity metadata or its image revision")
+	}
+	afterPNG := previewRequest(h, "GET", parsed.RequestURI())
+	if !bytes.Equal(beforePNG.Body.Bytes(), afterPNG.Body.Bytes()) || beforePNG.Header().Get("ETag") != afterPNG.Header().Get("ETag") {
+		t.Fatal("new observations must not change card bytes or ETag")
+	}
+	// Names remain mutable: a real identity edit must invalidate the revision.
+	pkt.Advert.Name = "Renamed Ridge"
+	if err := st.Record(store.Observation{Packet: pkt, RawHex: claimAdvertHex, ReceivedAt: time.Date(2026, 9, 11, 2, 0, 0, 0, time.UTC)}); err != nil {
+		t.Fatal(err)
+	}
+	renamed := previewRequest(h, "GET", path)
+	if headTags(t, renamed.Body.String())["og:image"][0] == imageURL {
+		t.Fatal("rename must change image revision")
+	}
+	if !strings.Contains(renamed.Body.String(), "Renamed Ridge") {
+		t.Fatal("rename not reflected in metadata")
+	}
+	if bytes.Equal(beforePNG.Body.Bytes(), previewRequest(h, "GET", parsed.RequestURI()).Body.Bytes()) {
+		t.Fatal("old image URL must still resolve current identity after rename")
 	}
 	if err := st.RetireNode(key, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{path, "/share/card.png?path=" + url.QueryEscape(path)} {
 		rr := previewRequest(h, "GET", p)
-		if strings.HasPrefix(p, "/share/") && rr.Code != 404 {
-			t.Fatal("retired image exposed")
-		}
-		if strings.Contains(rr.Body.String(), "Last advert observed") {
+		if strings.HasPrefix(p, "/share/") {
+			if rr.Code != 404 {
+				t.Fatal("retired image exposed")
+			}
+		} else if rr.Body.String() != previewShell {
 			t.Fatal("retired node data exposed")
 		}
 	}
@@ -175,6 +212,71 @@ func TestSharePreviewFreshnessAndVisibility(t *testing.T) {
 		t.Fatal("quarantined image exposed")
 	}
 }
+
+func TestShareCardLayouts(t *testing.T) {
+	_, key, h, _ := shareTestEnv(t)
+	for name, layout := range shareCardLayouts {
+		t.Run(name, func(t *testing.T) {
+			mono, err := opentype.NewFace(cardMono, &opentype.FaceOptions{Size: float64(layout.KeySize), DPI: 72, Hinting: font.HintingFull})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer mono.Close()
+			// At a 320px-wide thumbnail the complete key must stay at least 12px.
+			if float64(layout.KeySize)*320/float64(layout.Width) < 12 {
+				t.Fatal("public key too small at mobile preview width")
+			}
+			for _, key := range []string{strings.Repeat("F", 64), strings.Repeat("0123456789ABCDEF", 4)} {
+				lines := shareKeyLines(key, layout.KeyDigits)
+				if strings.ReplaceAll(strings.Join(lines, ""), " ", "") != key {
+					t.Fatal("card lost or reordered public-key digits")
+				}
+				for i, row := range lines {
+					bounds, advance := font.BoundString(mono, row)
+					if advance.Ceil() > layout.Width-2*layout.Margin || bounds.Min.X.Floor()+layout.Margin < 0 || bounds.Max.X.Ceil()+layout.Margin > layout.Width-layout.Margin {
+						t.Fatal("full key overflows horizontally")
+					}
+					baseline := layout.KeyY + i*layout.KeyGap
+					if baseline+bounds.Min.Y.Floor() <= layout.KeyLabelY || baseline+bounds.Max.Y.Ceil() > layout.Height-24 {
+						t.Fatal("full key clipped vertically or overlaps label")
+					}
+				}
+			}
+			f, err := opentype.NewFace(cardBold, &opentype.FaceOptions{Size: float64(layout.TitleSize), DPI: 72, Hinting: font.HintingFull})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			for _, title := range []string{"Cokley Ridge", strings.Repeat("W", 100), strings.Repeat("A long name ", 10), "松 🐟 Côte d’Azur", ""} {
+				for i, row := range shareCardLines(title, f, layout.TitleWidth, 2) {
+					bounds, advance := font.BoundString(f, row)
+					if advance.Ceil() > layout.TitleWidth || layout.TitleY+i*layout.TitleGap+bounds.Max.Y.Ceil() >= layout.RuleY {
+						t.Fatalf("title overflows: %q", row)
+					}
+				}
+			}
+			for _, path := range []string{"/nodes/" + key, "/nodes"} {
+				resp := previewRequest(h, "GET", "/share/card.png?path="+url.QueryEscape(path)+"&format="+name)
+				cfg, err := png.DecodeConfig(resp.Body)
+				if resp.Code != 200 || err != nil || cfg.Width != layout.Width || cfg.Height != layout.Height {
+					t.Fatalf("%s PNG: %d, %+v, %v", name, resp.Code, cfg, err)
+				}
+			}
+		})
+	}
+	plain := previewRequest(h, "GET", "/share/card.png?path=/nodes")
+	explicit := previewRequest(h, "GET", "/share/card.png?path=/nodes&format=wide")
+	if !bytes.Equal(plain.Body.Bytes(), explicit.Body.Bytes()) {
+		t.Fatal("default must remain wide")
+	}
+	for _, format := range []string{"huge", "100000x100000", "../story", "WIDE"} {
+		rr := previewRequest(h, "GET", "/share/card.png?path=/nodes&format="+url.QueryEscape(format))
+		if rr.Code != 400 || rr.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("unknown format must fail without caching")
+		}
+	}
+}
+
 func TestSharePreviewFallbacksAndPages(t *testing.T) {
 	st, _, h, _ := shareTestEnv(t)
 	for p, want := range map[string]string{"/about": "prerendered about", "/app.js": "original JS", "/login?token=secret": previewShell, "/admin": previewShell, "/nodes/nope": previewShell, "/unknown": previewShell} {
@@ -224,20 +326,27 @@ func TestShareEscapingAndCard(t *testing.T) {
 	}
 	for _, title := range []string{strings.Repeat("Wide name ", 50), "松 🐟 Côte d’Azur", ""} {
 		p.Title = title
-		b, err := renderShareCard(shareSite{Name: strings.Repeat("Long site ", 20)}, p)
+		b, err := renderShareCard(shareSite{Name: strings.Repeat("Long site ", 20)}, p, shareCardLayouts["wide"])
 		if err != nil || len(b) == 0 {
 			t.Fatalf("render %q: %v", title, err)
 		}
 	}
 	// Optional visual fixture, with explicitly synthetic public data.
 	if dest := os.Getenv("RIDGELINE_SHARE_PREVIEW_SAMPLE"); dest != "" {
-		p = sharePreview{Title: "Cokley Ridge", Path: "/nodes/" + strings.Repeat("48", 32), Node: &store.ShareNode{PublicKey: strings.Repeat("48", 32), Name: "Cokley Ridge", Role: "repeater", FirstSeen: "2026-08-12T06:41:00Z", LastAdvert: "2026-09-10T22:06:00Z"}}
-		b, err := renderShareCard(shareSite{Name: "Ridgeline", URL: "https://mesh.example"}, p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(dest, b, 0600); err != nil {
-			t.Fatal(err)
+		const exampleKey = "00693EEBEECE35F80217D5A26F2E7208BEC362E68B251FAC36CE7A7D9A33763B"
+		p = sharePreview{Title: "Cokley Ridge", Path: "/nodes/" + exampleKey, Node: &store.ShareNode{PublicKey: exampleKey, Name: "Cokley Ridge", Role: "repeater"}}
+		for name, layout := range shareCardLayouts {
+			b, err := renderShareCard(shareSite{Name: "Ridgeline", URL: "https://mesh.example"}, p, layout)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := dest
+			if name != "wide" {
+				path = strings.TrimSuffix(dest, ".png") + "-" + name + ".png"
+			}
+			if err := os.WriteFile(path, b, 0600); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }

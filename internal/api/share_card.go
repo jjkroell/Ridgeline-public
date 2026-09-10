@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"crypto/sha256"
+	"embed"
 	"image"
 	"image/color"
 	"image/draw"
@@ -17,13 +18,70 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// Go's bundled fonts are redistributable and keep image generation offline,
-// deterministic and CGO-free. Faces are request-local (they are not concurrent).
+// Bundled fonts keep generation offline, deterministic and CGO-free.
+// Each render owns its font faces; opentype faces are not concurrent.
 var cardRegular, _ = opentype.Parse(goregular.TTF)
 var cardBold, _ = opentype.Parse(gobold.TTF)
 
-func renderShareCard(site shareSite, p sharePreview) ([]byte, error) {
-	img := image.NewRGBA(image.Rect(0, 0, 1200, 630))
+// Keep the redistribution notice with the font in the embedded file system.
+//
+//go:embed fonts/JetBrainsMono-Regular.ttf fonts/OFL.txt
+var cardFontFiles embed.FS
+
+var cardMono = func() *opentype.Font {
+	b, err := cardFontFiles.ReadFile("fonts/JetBrainsMono-Regular.ttf")
+	if err != nil {
+		panic(err)
+	}
+	f, err := opentype.Parse(b)
+	if err != nil {
+		panic(err)
+	}
+	return f
+}()
+
+type shareCardLayout struct {
+	Width, Height, Margin                   int
+	BrandY, BrandSize                       int
+	IconX, IconY, IconSize                  int
+	RoleX, RoleY, RoleSize                  int
+	TitleY, TitleSize, TitleWidth, TitleGap int
+	RuleY, KeyLabelY, KeyY                  int
+	KeySize, KeyGap, KeyDigits              int
+}
+
+// Fixed output sizes bound rendering cost. Taller cards reflow their identity
+// and key, rather than cropping or stretching the landscape card. Coordinates
+// are baselines; story content stays clear of the top/bottom overlay areas.
+var shareCardLayouts = map[string]shareCardLayout{
+	"wide": {
+		Width: 1200, Height: 630, Margin: 56, BrandY: 109, BrandSize: 45,
+		IconX: 932, IconY: 182, IconSize: 212, RoleX: 56, RoleY: 193, RoleSize: 45,
+		TitleY: 285, TitleSize: 80, TitleWidth: 820, TitleGap: 90,
+		RuleY: 417, KeyLabelY: 467, KeyY: 522, KeySize: 48, KeyGap: 58, KeyDigits: 32,
+	},
+	"square": {
+		Width: 1080, Height: 1080, Margin: 64, BrandY: 120, BrandSize: 48,
+		IconX: 64, IconY: 210, IconSize: 188, RoleX: 296, RoleY: 323, RoleSize: 48,
+		TitleY: 485, TitleSize: 88, TitleWidth: 952, TitleGap: 98,
+		RuleY: 630, KeyLabelY: 695, KeyY: 774, KeySize: 72, KeyGap: 82, KeyDigits: 16,
+	},
+	"portrait": {
+		Width: 1080, Height: 1350, Margin: 64, BrandY: 144, BrandSize: 48,
+		IconX: 64, IconY: 260, IconSize: 232, RoleX: 344, RoleY: 395, RoleSize: 48,
+		TitleY: 630, TitleSize: 92, TitleWidth: 952, TitleGap: 110,
+		RuleY: 850, KeyLabelY: 916, KeyY: 1000, KeySize: 72, KeyGap: 82, KeyDigits: 16,
+	},
+	"story": {
+		Width: 1080, Height: 1920, Margin: 64, BrandY: 260, BrandSize: 48,
+		IconX: 64, IconY: 430, IconSize: 260, RoleX: 372, RoleY: 580, RoleSize: 48,
+		TitleY: 880, TitleSize: 96, TitleWidth: 952, TitleGap: 112,
+		RuleY: 1150, KeyLabelY: 1230, KeyY: 1320, KeySize: 72, KeyGap: 82, KeyDigits: 16,
+	},
+}
+
+func renderShareCard(site shareSite, p sharePreview, layout shareCardLayout) ([]byte, error) {
+	img := image.NewRGBA(image.Rect(0, 0, layout.Width, layout.Height))
 	bg := color.RGBA{13, 17, 23, 255}
 	panel := color.RGBA{22, 29, 37, 255}
 	line := color.RGBA{48, 59, 71, 255}
@@ -34,21 +92,18 @@ func renderShareCard(site shareSite, p sharePreview) ([]byte, error) {
 	rect := func(x, y, w, h int, c color.RGBA) {
 		draw.Draw(img, image.Rect(x, y, x+w, y+h), image.NewUniform(c), image.Point{}, draw.Src)
 	}
-	rect(0, 0, 1200, 630, bg)
-	rect(0, 0, 900, 6, teal)
-	rect(900, 0, 300, 6, gold)
-	faces := map[string]font.Face{}
-	face := func(size int, bold bool) font.Face {
-		key := string(rune(size))
-		if bold {
-			key += "b"
-		}
+	rect(0, 0, layout.Width, layout.Height, bg)
+	rect(0, 0, layout.Width*3/4, 6, teal)
+	rect(layout.Width*3/4, 0, layout.Width/4, 6, gold)
+	type faceKey struct {
+		size int
+		font *opentype.Font
+	}
+	faces := map[faceKey]font.Face{}
+	face := func(size int, fnt *opentype.Font) font.Face {
+		key := faceKey{size, fnt}
 		if f, ok := faces[key]; ok {
 			return f
-		}
-		fnt := cardRegular
-		if bold {
-			fnt = cardBold
 		}
 		f, _ := opentype.NewFace(fnt, &opentype.FaceOptions{Size: float64(size), DPI: 72, Hinting: font.HintingFull})
 		faces[key] = f
@@ -59,103 +114,123 @@ func renderShareCard(site shareSite, p sharePreview) ([]byte, error) {
 			f.Close()
 		}
 	}()
-	text := func(s string, x, y, size, maxWidth int, bold bool, c color.RGBA) {
-		f := face(size, bold)
-		// Keep unsupported glyphs visible instead of silently dropping node names.
-		s = strings.Map(func(r rune) rune {
-			if _, ok := f.GlyphAdvance(r); !ok {
-				return '□'
-			}
-			return r
-		}, s)
-		if font.MeasureString(f, s).Ceil() > maxWidth {
-			r := []rune(s)
-			for len(r) > 0 && font.MeasureString(f, string(r)+"…").Ceil() > maxWidth {
-				r = r[:len(r)-1]
-			}
-			s = string(r) + "…"
-		}
+	text := func(s string, x, y int, f font.Face, c color.RGBA) {
 		d := font.Drawer{Dst: img, Src: image.NewUniform(c), Face: f, Dot: fixed.P(x, y)}
 		d.DrawString(s)
 	}
-	// Small brand mark; the node identity carries the visual emphasis.
+	contentWidth := layout.Width - 2*layout.Margin
+	// The small mountain is the brand; the key-derived identicon identifies the node.
 	poly := func(points [][2]float32, c color.RGBA) {
-		z := vector.NewRasterizer(1200, 630)
-		z.MoveTo(points[0][0], points[0][1])
-		for _, p := range points[1:] {
-			z.LineTo(p[0], p[1])
+		z := vector.NewRasterizer(layout.Width, layout.Height)
+		for i, p := range points {
+			x, y := p[0]+float32(layout.Margin), p[1]+float32(layout.BrandY-53)
+			if i == 0 {
+				z.MoveTo(x, y)
+			} else {
+				z.LineTo(x, y)
+			}
 		}
 		z.ClosePath()
 		z.Draw(img, img.Bounds(), image.NewUniform(c), image.Point{})
 	}
-	poly([][2]float32{{56, 91}, {76, 64}, {91, 77}, {114, 48}, {141, 91}, {131, 96}, {113, 67}, {93, 94}, {78, 80}, {65, 98}}, teal)
-	poly([][2]float32{{64, 108}, {81, 88}, {95, 100}, {114, 79}, {137, 109}, {130, 115}, {113, 94}, {96, 115}, {82, 103}, {70, 115}}, gold)
-	text(site.Name, 162, 91, 32, 680, true, white)
-	text("MESHCORE OBSERVATORY", 56, 161, 17, 800, true, muted)
-	label := "PUBLIC PAGE"
+	poly([][2]float32{{0, 43}, {20, 16}, {35, 29}, {58, 0}, {85, 43}, {75, 48}, {57, 19}, {37, 46}, {22, 32}, {9, 50}}, teal)
+	poly([][2]float32{{8, 60}, {25, 40}, {39, 52}, {58, 31}, {81, 61}, {74, 67}, {57, 46}, {40, 67}, {26, 55}, {14, 67}}, gold)
+	brandFace := face(layout.BrandSize, cardBold)
+	text(shareCardLines(site.Name, brandFace, contentWidth-112, 1)[0], layout.Margin+112, layout.BrandY, brandFace, white)
 	if p.Node != nil {
-		label = strings.ToUpper(shareRole(p.Node.Role))
+		roleFace := face(layout.RoleSize, cardRegular)
+		text(shareCardLines(shareRole(p.Node.Role), roleFace, layout.Width-layout.Margin-layout.RoleX, 1)[0], layout.RoleX, layout.RoleY, roleFace, teal)
 	}
-	text(label, 922, 87, 17, 230, true, teal)
-	// Two title lines, wrapping at a word boundary when one is available.
-	title := cleanShareText(p.Title, 100)
-	runes := []rune(title)
-	cut := len(runes)
-	for cut > 0 && font.MeasureString(face(54, true), string(runes[:cut])).Ceil() > 810 {
-		cut--
+	titleFace := face(layout.TitleSize, cardBold)
+	for i, row := range shareCardLines(cleanShareText(p.Title, 100), titleFace, layout.TitleWidth, 2) {
+		text(row, layout.Margin, layout.TitleY+i*layout.TitleGap, titleFace, white)
 	}
-	if cut < len(runes) {
-		lineEnd := cut
-		for i := cut; i > cut/2; i-- {
-			if runes[i-1] == ' ' {
-				lineEnd = i - 1
-				break
-			}
-		}
-		text(string(runes[:lineEnd]), 56, 237, 54, 810, true, white)
-		text(strings.TrimSpace(string(runes[lineEnd:])), 56, 304, 54, 810, true, white)
-	} else {
-		text(title, 56, 237, 54, 810, true, white)
-	}
-	// Identicon encodes the public key (or route); decorative, not telemetry.
 	identity := p.Path
 	if p.Node != nil {
 		identity = p.Node.PublicKey
 	}
 	sum := sha256.Sum256([]byte(identity))
-	rect(932, 172, 212, 212, panel)
+	rect(layout.IconX, layout.IconY, layout.IconSize, layout.IconSize, panel)
+	cell := layout.IconSize * 4 / 25
+	inset := (layout.IconSize - cell*5) / 2
 	for y := 0; y < 5; y++ {
 		for x := 0; x < 3; x++ {
 			if sum[y*3+x]&1 != 0 {
-				rect(953+x*34, 193+y*34, 28, 28, teal)
-				rect(953+(4-x)*34, 193+y*34, 28, 28, teal)
+				rect(layout.IconX+inset+x*cell, layout.IconY+inset+y*cell, cell*4/5, cell*4/5, teal)
+				rect(layout.IconX+inset+(4-x)*cell, layout.IconY+inset+y*cell, cell*4/5, cell*4/5, teal)
 			}
 		}
 	}
+	rect(layout.Margin, layout.RuleY, contentWidth, 1, line)
 	if p.Node != nil {
-		key := p.Node.PublicKey
-		text(key[:16]+"…"+key[len(key)-12:], 56, 352, 22, 820, false, muted)
+		text("Public key", layout.Margin, layout.KeyLabelY, face(40, cardRegular), muted)
+		// Every digit is rendered. Keys never pass through text truncation.
+		for i, row := range shareKeyLines(p.Node.PublicKey, layout.KeyDigits) {
+			text(row, layout.Margin, layout.KeyY+i*layout.KeyGap, face(layout.KeySize, cardMono), white)
+		}
 	} else {
-		text(p.Description, 56, 352, 22, 820, false, muted)
+		size, gap, maxLines := 48, 64, 4
+		if layout.KeyDigits == 32 {
+			size, gap, maxLines = 40, 54, 2
+		}
+		f := face(size, cardRegular)
+		for i, row := range shareCardLines(p.Description, f, contentWidth, maxLines) {
+			text(row, layout.Margin, layout.KeyLabelY+i*gap, f, muted)
+		}
 	}
-	rect(56, 411, 1088, 1, line)
-	if p.Node != nil {
-		text("LAST ADVERT OBSERVED", 56, 454, 16, 600, true, muted)
-		text(shareDate(p.Node.LastAdvert), 56, 497, 29, 610, true, white)
-		rect(717, 442, 1, 63, line)
-		text("FIRST OBSERVED", 760, 454, 16, 380, true, muted)
-		text(shareDate(p.Node.FirstSeen), 760, 497, 22, 380, false, white)
-	} else {
-		text("EXPLORE THE NETWORK", 56, 454, 16, 900, true, muted)
-		text("Nodes, coverage and the connections between them.", 56, 497, 28, 1080, false, white)
-	}
-	text("PUBLIC RECORD  /  OPEN FOR CURRENT DETAILS", 56, 583, 15, 680, true, muted)
-	host := strings.TrimPrefix(strings.TrimPrefix(site.URL, "https://"), "http://")
-	if host == "" {
-		host = "MeshCore · Ridgeline"
-	}
-	text(host, 760, 583, 18, 384, false, muted)
 	var out bytes.Buffer
 	err := png.Encode(&out, img)
 	return out.Bytes(), err
+}
+
+// Wrap at word boundaries when possible, retaining a readable fixed font size.
+// Only names/descriptions may ellipsize; the full Unicode name remains in HTML.
+func shareCardLines(s string, f font.Face, width, maxLines int) []string {
+	s = strings.Map(func(r rune) rune {
+		if _, ok := f.GlyphAdvance(r); !ok {
+			return '□'
+		}
+		return r
+	}, s)
+	var lines []string
+	for len(lines) < maxLines {
+		r := []rune(strings.TrimSpace(s))
+		if font.MeasureString(f, string(r)).Ceil() <= width {
+			return append(lines, string(r))
+		}
+		last := len(lines) == maxLines-1
+		suffix := ""
+		if last {
+			suffix = "…"
+		}
+		cut := len(r)
+		for cut > 0 && font.MeasureString(f, string(r[:cut])+suffix).Ceil() > width {
+			cut--
+		}
+		if !last {
+			for i := cut; i > cut/2; i-- {
+				if r[i-1] == ' ' {
+					cut = i - 1
+					break
+				}
+			}
+		}
+		lines = append(lines, string(r[:cut])+suffix)
+		s = string(r[cut:])
+	}
+	return lines
+}
+
+// lookupPreview validates a 64-character hex key before rendering. Eight-digit
+// groups wrap into two landscape rows or four larger rows for taller formats.
+func shareKeyLines(key string, digitsPerLine int) []string {
+	var lines []string
+	for start := 0; start < len(key); start += digitsPerLine {
+		var groups []string
+		for i := start; i < start+digitsPerLine && i < len(key); i += 8 {
+			groups = append(groups, key[i:min(i+8, len(key))])
+		}
+		lines = append(lines, strings.Join(groups, " "))
+	}
+	return lines
 }
