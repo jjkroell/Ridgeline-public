@@ -15,7 +15,7 @@
 
 		<!-- Primary SEO. Route metadata (title/description/og:*/twitter:title and
 		     description) is owned by $lib/components/Seo.svelte so exactly one set is
-		     emitted per route; the generic fallback now lives after %sveltekit.head%
+		     emitted per route; the generic fallback now lives after the SvelteKit head placeholder
 		     below. Only invariant tags remain here.
 		     setup.sh personalizes the site name and (optionally) the region/geo tags
 		     below from your install answers. -->
@@ -31,13 +31,13 @@
 		<link rel="alternate" type="application/xml" title="Sitemap" href="/sitemap.xml" />
 
 		<!-- Open Graph (Facebook, Discord, Slack, iMessage, etc.) -->
-		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="Ridgeline" />
-		<meta property="og:image" content="/icons/icon-512.png" />
+		<meta property="og:type" content="website" data-ridgeline-share />
+		<meta property="og:site_name" content="Ridgeline" data-ridgeline-share />
+		<meta property="og:image" content="/icons/icon-512.png" data-ridgeline-share />
 
 		<!-- Twitter / X card -->
-		<meta name="twitter:card" content="summary" />
-		<meta name="twitter:image" content="/icons/icon-512.png" />
+		<meta name="twitter:card" content="summary" data-ridgeline-share />
+		<meta name="twitter:image" content="/icons/icon-512.png" data-ridgeline-share />
 
 		<!-- Structured data: helps search engines understand what this observatory is. -->
 		<script type="application/ld+json">
@@ -88,7 +88,7 @@
 		</script>
 		%sveltekit.head%
 
-		<!-- Generic fallback, deliberately placed AFTER %sveltekit.head% so that a
+		<!-- Generic fallback, deliberately placed AFTER the SvelteKit head placeholder so that a
 		     route's own tags come first for unfurlers that take the first match.
 		     On prerendered routes these are stripped entirely at build time by
 		     scripts/dedupe-head.mjs, leaving exactly one authoritative set.
@@ -98,16 +98,19 @@
 		<meta
 			name="description"
 			content="Ridgeline is a live observatory for a MeshCore LoRa mesh network. Track nodes, repeaters, coverage and packet activity in real time."
+			data-ridgeline-share
 		/>
-		<meta property="og:title" content="Ridgeline — MeshCore Mesh Observatory" />
+		<meta property="og:title" content="Ridgeline — MeshCore Mesh Observatory" data-ridgeline-share />
 		<meta
 			property="og:description"
 			content="Live map and analytics for a MeshCore LoRa mesh: nodes, repeaters, coverage and packets in real time."
+			data-ridgeline-share
 		/>
-		<meta name="twitter:title" content="Ridgeline — MeshCore Mesh Observatory" />
+		<meta name="twitter:title" content="Ridgeline — MeshCore Mesh Observatory" data-ridgeline-share />
 		<meta
 			name="twitter:description"
 			content="Live map and analytics for a MeshCore LoRa mesh — nodes, repeaters, coverage and packets in real time."
+			data-ridgeline-share
 		/>
 	</head>
 	<body data-sveltekit-preload-data="hover">

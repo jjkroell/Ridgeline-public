@@ -20,7 +20,10 @@ const KEYS = [
 	{ re: /<meta\s+property="og:title"[\s\S]*?\/>/g, name: 'og:title' },
 	{ re: /<meta\s+property="og:description"[\s\S]*?\/>/g, name: 'og:description' },
 	{ re: /<meta\s+name="twitter:title"[\s\S]*?\/>/g, name: 'twitter:title' },
-	{ re: /<meta\s+name="twitter:description"[\s\S]*?\/>/g, name: 'twitter:description' }
+	{ re: /<meta\s+name="twitter:description"[\s\S]*?\/>/g, name: 'twitter:description' },
+	...['og:type', 'og:site_name', 'og:image', 'twitter:card', 'twitter:image'].map((key) => ({
+		re: new RegExp(`<meta\\s+(?:name|property)="${key}"[^>]*>`, 'g'), name: key
+	}))
 ];
 
 async function* htmlFiles(dir) {

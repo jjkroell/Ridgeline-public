@@ -71,6 +71,9 @@ A single web app with, among other things:
   hop never varies (a cable, not an antenna). Bridges you run on purpose can be
   marked known so they stop being reported as findings. See
   [docs/bridge-detection.md](docs/bridge-detection.md).
+- **Share previews** — server-rendered metadata and PNG cards for public node
+  links and section roots. See [share previews](docs/share-previews.md) for
+  configuration, cache behavior and supported routes.
 - **Light/dark theme**, and a WebGL-free fallback map for browsers without it.
 
 ## How it works

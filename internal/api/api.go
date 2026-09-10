@@ -211,7 +211,7 @@ func (s *Server) Handler() http.Handler {
 
 	if s.webDir != "" {
 		if info, err := os.Stat(s.webDir); err == nil && info.IsDir() {
-			mux.HandleFunc("/", staticHandler(s.webDir))
+			mux.HandleFunc("/", s.shareHandler(staticHandler(s.webDir)))
 			s.log.Info("serving web UI", "dir", s.webDir)
 		} else {
 			s.log.Warn("web dir not found, serving API only", "dir", s.webDir)
