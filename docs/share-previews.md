@@ -36,7 +36,10 @@ reads the matching environment file. No credentials go into this manifest.
 - Go's bundled regular/bold fonts and embedded JetBrains Mono keep rendering
   offline and deterministic. Font provenance and OFL license are in
   `internal/api/fonts/`; the font and license are embedded in the daemon.
-  Unsupported glyphs use a visible box in the image; full Unicode remains in HTML.
+  Known emoji use bundled Noto color PNGs, including flags, skin tones, keycaps
+  and joined sequences. Other unsupported glyphs use a visible box in the image;
+  full Unicode remains in HTML. Text measurement and truncation keep recognized
+  emoji sequences intact, including during sanitization.
 
 ## Image formats and small previews
 
@@ -52,6 +55,8 @@ for a different composition, for example:
 | `story` | 1080 × 1920 | 4 rows of 16 hex digits |
 
 Only these four formats are accepted; unknown formats return an uncached 400.
+The wide identicon aligns to the visible role/title block, including wrapped
+titles, and its visible pattern is centered within the panel.
 The layout changes with the aspect ratio: the identicon moves above the title,
 the title gets more width and the key wraps into larger rows. Story content
 leaves room at the top and bottom for interface overlays. Footer captions,
@@ -72,6 +77,18 @@ image endpoints for sharing/export clients, not automatic platform detection.
 The app's standard link metadata continues to advertise only the wide image.
 No guarantee is made for tiny icons or a service that crops the supplied image.
 
+## Emoji assets
+
+The pinned [Noto Emoji](https://github.com/googlefonts/noto-emoji) archive contains
+3,985 PNGs on 128px canvases (about 21.3 MiB compressed). Country and subdivision
+flags are resized without distorting their proportions; other artwork is unmodified. This is the binary-size
+tradeoff for offline color emoji without an OS font, browser renderer or CDN
+image fetch. Only artwork used in a request is decoded, with a request-local
+cache discarded after rendering; the archive and sequence index are read-only.
+Licenses, authors, upstream commit, checksum and an update script are included in
+`internal/api/emoji`. Joiners and tag characters are preserved only inside known
+emoji sequences; unrelated control and directional-format characters are stripped.
+
 ## Freshness and caching
 
 A fresh request reads only the public identity fields using an indexed lookup.
@@ -81,7 +98,9 @@ image revision or ETag. Both responses use ETags: HTML has a five-minute cache
 lifetime so identity edits get a new image URL promptly; PNGs allow a one-day
 cache lifetime with revalidation. Images are rendered on demand, with at most
 four concurrent renders and no unbounded in-process image cache. Overload returns
-503 and Retry-After. Errors and missing images use `no-store`.
+503 and Retry-After. Errors and missing images use `no-store`. A CDN can honor
+these origin headers; its image cache key must retain `path`, `format` and `v`.
+No deployment-specific CDN configuration is required by the renderer.
 
 The image endpoint always returns the current public identity, including for an
 old `v` query. It is deliberately **not immutable** and does not store historical

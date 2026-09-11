@@ -1,7 +1,10 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
+	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"log/slog"
@@ -249,8 +252,8 @@ func TestShareCardLayouts(t *testing.T) {
 			defer f.Close()
 			for _, title := range []string{"Cokley Ridge", strings.Repeat("W", 100), strings.Repeat("A long name ", 10), "松 🐟 Côte d’Azur", ""} {
 				for i, row := range shareCardLines(title, f, layout.TitleWidth, 2) {
-					bounds, advance := font.BoundString(f, row)
-					if advance.Ceil() > layout.TitleWidth || layout.TitleY+i*layout.TitleGap+bounds.Max.Y.Ceil() >= layout.RuleY {
+					bounds, _ := font.BoundString(f, row)
+					if shareCardTextWidth(row, f).Ceil() > layout.TitleWidth || layout.TitleY+i*layout.TitleGap+bounds.Max.Y.Ceil() >= layout.RuleY {
 						t.Fatalf("title overflows: %q", row)
 					}
 				}
@@ -334,7 +337,7 @@ func TestShareEscapingAndCard(t *testing.T) {
 	// Optional visual fixture, with explicitly synthetic public data.
 	if dest := os.Getenv("RIDGELINE_SHARE_PREVIEW_SAMPLE"); dest != "" {
 		const exampleKey = "00693EEBEECE35F80217D5A26F2E7208BEC362E68B251FAC36CE7A7D9A33763B"
-		p = sharePreview{Title: "Cokley Ridge", Path: "/nodes/" + exampleKey, Node: &store.ShareNode{PublicKey: exampleKey, Name: "Cokley Ridge", Role: "repeater"}}
+		p = sharePreview{Title: "The Richmond 🏠", Path: "/nodes/" + exampleKey, Node: &store.ShareNode{PublicKey: exampleKey, Name: "The Richmond 🏠", Role: ""}}
 		for name, layout := range shareCardLayouts {
 			b, err := renderShareCard(shareSite{Name: "Ridgeline", URL: "https://mesh.example"}, p, layout)
 			if err != nil {
@@ -348,5 +351,93 @@ func TestShareEscapingAndCard(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+	}
+}
+
+func TestShareEmojiSequencesAndLayout(t *testing.T) {
+	f, err := opentype.NewFace(cardBold, &opentype.FaceOptions{Size: 80, DPI: 72, Hinting: font.HintingFull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, emoji := range []string{"🏠", "📡", "🐟", "❤️", "🇨🇦", "🇧🇻", "👍🏽", "👩🏽‍💻", "🏳️‍🌈", "👨‍👩‍👧‍👦", "1️⃣", "🏴\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F"} {
+		asset, size := shareEmojiMatch(emoji + " tail")
+		if asset == nil || size != len(emoji) {
+			t.Fatalf("emoji not matched whole: %q (%d)", emoji, size)
+		}
+		if cleanShareText(emoji, 100) != emoji {
+			t.Fatalf("emoji damaged by sanitization: %q", emoji)
+		}
+		if clusters := shareCardClusters(emoji, f); len(clusters) != 1 || clusters[0] != emoji {
+			t.Fatalf("emoji split into %v", clusters)
+		}
+		for _, row := range shareCardLines(strings.Repeat(emoji+" ", 25), f, 500, 2) {
+			if strings.Contains(row, "□") || shareCardTextWidth(row, f).Ceil() > 500 {
+				t.Fatalf("broken emoji wrapping: %q", row)
+			}
+		}
+	}
+	for _, plain := range []string{"0", "1", "9", "A", "B", "C", "D", "E", "F", "#", "*", " ", "\u200d", "\u202e"} {
+		if asset, _ := shareEmojiMatch(plain); asset != nil {
+			t.Fatalf("plain text became emoji: %q", plain)
+		}
+	}
+	if shareCardTextWidth("0123456789ABCDEF", f) != font.MeasureString(f, "0123456789ABCDEF") {
+		t.Fatal("emoji handling changed public-key glyph widths")
+	}
+	if f, _ := shareEmojiMatch("♥︎"); f != nil {
+		t.Fatal("text presentation must not become color emoji")
+	}
+	if cleanShareText("a👨‍👩‍👧‍👦b", 4) != "a…" {
+		t.Fatal("length limit split a joined emoji")
+	}
+	if cleanShareText("a\u200db\u202ec", 20) != "a b c" {
+		t.Fatal("stray controls were retained")
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 320, 120))
+	cache := map[string]image.Image{}
+	if err := drawShareCardText(img, "🏠 🏠", 8, 90, f, color.RGBA{255, 255, 255, 255}, cache); err != nil {
+		t.Fatal(err)
+	}
+	if len(cache) != 1 {
+		t.Fatal("repeated emoji should reuse one request-local decode")
+	}
+	colored := 0
+	for y := 0; y < 120; y++ {
+		for x := 0; x < 320; x++ {
+			c := img.RGBAAt(x, y)
+			if c.A > 128 && (int(c.R)-int(c.B) > 30 || int(c.B)-int(c.R) > 30) {
+				colored++
+			}
+		}
+	}
+	if colored < 100 {
+		t.Fatal("emoji rendered without its color artwork")
+	}
+}
+
+func TestShareEmojiAssets(t *testing.T) {
+	archive, err := zip.NewReader(bytes.NewReader(shareEmojiArchive), int64(len(shareEmojiArchive)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, file := range archive.File {
+		if !strings.HasSuffix(file.Name, ".png") {
+			continue
+		}
+		r, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := png.DecodeConfig(r)
+		r.Close()
+		if err != nil || cfg.Width > 128 || cfg.Height > 128 || cfg.Width < 1 || cfg.Height < 1 {
+			t.Fatalf("invalid bundled emoji %s: %+v %v", file.Name, cfg, err)
+		}
+		count++
+	}
+	if count < 3000 {
+		t.Fatal("incomplete emoji bundle")
 	}
 }

@@ -14,7 +14,6 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
-	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/vector"
 )
 
@@ -114,9 +113,13 @@ func renderShareCard(site shareSite, p sharePreview, layout shareCardLayout) ([]
 			f.Close()
 		}
 	}()
+	// Decode only the emoji used by this request; discard them after rendering.
+	emojiCache := map[string]image.Image{}
+	var textErr error
 	text := func(s string, x, y int, f font.Face, c color.RGBA) {
-		d := font.Drawer{Dst: img, Src: image.NewUniform(c), Face: f, Dot: fixed.P(x, y)}
-		d.DrawString(s)
+		if textErr == nil {
+			textErr = drawShareCardText(img, s, x, y, f, c, emojiCache)
+		}
 	}
 	contentWidth := layout.Width - 2*layout.Margin
 	// The small mountain is the brand; the key-derived identicon identifies the node.
@@ -136,13 +139,18 @@ func renderShareCard(site shareSite, p sharePreview, layout shareCardLayout) ([]
 	poly([][2]float32{{0, 43}, {20, 16}, {35, 29}, {58, 0}, {85, 43}, {75, 48}, {57, 19}, {37, 46}, {22, 32}, {9, 50}}, teal)
 	poly([][2]float32{{8, 60}, {25, 40}, {39, 52}, {58, 31}, {81, 61}, {74, 67}, {57, 46}, {40, 67}, {26, 55}, {14, 67}}, gold)
 	brandFace := face(layout.BrandSize, cardBold)
-	text(shareCardLines(site.Name, brandFace, contentWidth-112, 1)[0], layout.Margin+112, layout.BrandY, brandFace, white)
+	brandWidth := contentWidth - 112
+	if layout.KeyDigits == 32 {
+		brandWidth = layout.IconX - layout.Margin - 168
+	}
+	text(shareCardLines(site.Name, brandFace, brandWidth, 1)[0], layout.Margin+112, layout.BrandY, brandFace, white)
 	if p.Node != nil {
 		roleFace := face(layout.RoleSize, cardRegular)
 		text(shareCardLines(shareRole(p.Node.Role), roleFace, layout.Width-layout.Margin-layout.RoleX, 1)[0], layout.RoleX, layout.RoleY, roleFace, teal)
 	}
 	titleFace := face(layout.TitleSize, cardBold)
-	for i, row := range shareCardLines(cleanShareText(p.Title, 100), titleFace, layout.TitleWidth, 2) {
+	titleRows := shareCardLines(cleanShareText(p.Title, 100), titleFace, layout.TitleWidth, 2)
+	for i, row := range titleRows {
 		text(row, layout.Margin, layout.TitleY+i*layout.TitleGap, titleFace, white)
 	}
 	identity := p.Path
@@ -150,14 +158,41 @@ func renderShareCard(site shareSite, p sharePreview, layout shareCardLayout) ([]
 		identity = p.Node.PublicKey
 	}
 	sum := sha256.Sum256([]byte(identity))
-	rect(layout.IconX, layout.IconY, layout.IconSize, layout.IconSize, panel)
+	iconY := layout.IconY
+	if layout.KeyDigits == 32 {
+		// Align the avatar with the actual role/title ink, not empty title rows.
+		firstTop, _ := shareCardTextVerticalBounds(titleRows[0], titleFace)
+		_, lastBottom := shareCardTextVerticalBounds(titleRows[len(titleRows)-1], titleFace)
+		top := layout.TitleY + firstTop
+		bottom := layout.TitleY + (len(titleRows)-1)*layout.TitleGap + lastBottom
+		if p.Node != nil {
+			roleBounds, _ := font.BoundString(face(layout.RoleSize, cardRegular), shareRole(p.Node.Role))
+			top = layout.RoleY + roleBounds.Min.Y.Floor()
+		}
+		iconY = (top + bottom - layout.IconSize) / 2
+	}
+	rect(layout.IconX, iconY, layout.IconSize, layout.IconSize, panel)
 	cell := layout.IconSize * 4 / 25
 	inset := (layout.IconSize - cell*5) / 2
+	// Vertically center the visible pattern even when its outer rows are blank.
+	minRow, maxRow := 4, 0
 	for y := 0; y < 5; y++ {
 		for x := 0; x < 3; x++ {
 			if sum[y*3+x]&1 != 0 {
-				rect(layout.IconX+inset+x*cell, layout.IconY+inset+y*cell, cell*4/5, cell*4/5, teal)
-				rect(layout.IconX+inset+(4-x)*cell, layout.IconY+inset+y*cell, cell*4/5, cell*4/5, teal)
+				minRow = min(minRow, y)
+				maxRow = max(maxRow, y)
+			}
+		}
+	}
+	if minRow > maxRow {
+		minRow, maxRow = 0, 4
+	}
+	patternY := iconY + (layout.IconSize-((maxRow-minRow)*cell+cell*4/5))/2
+	for y := 0; y < 5; y++ {
+		for x := 0; x < 3; x++ {
+			if sum[y*3+x]&1 != 0 {
+				rect(layout.IconX+inset+x*cell, patternY+(y-minRow)*cell, cell*4/5, cell*4/5, teal)
+				rect(layout.IconX+inset+(4-x)*cell, patternY+(y-minRow)*cell, cell*4/5, cell*4/5, teal)
 			}
 		}
 	}
@@ -178,6 +213,9 @@ func renderShareCard(site shareSite, p sharePreview, layout shareCardLayout) ([]
 			text(row, layout.Margin, layout.KeyLabelY+i*gap, f, muted)
 		}
 	}
+	if textErr != nil {
+		return nil, textErr
+	}
 	var out bytes.Buffer
 	err := png.Encode(&out, img)
 	return out.Bytes(), err
@@ -186,17 +224,11 @@ func renderShareCard(site shareSite, p sharePreview, layout shareCardLayout) ([]
 // Wrap at word boundaries when possible, retaining a readable fixed font size.
 // Only names/descriptions may ellipsize; the full Unicode name remains in HTML.
 func shareCardLines(s string, f font.Face, width, maxLines int) []string {
-	s = strings.Map(func(r rune) rune {
-		if _, ok := f.GlyphAdvance(r); !ok {
-			return '□'
-		}
-		return r
-	}, s)
 	var lines []string
 	for len(lines) < maxLines {
-		r := []rune(strings.TrimSpace(s))
-		if font.MeasureString(f, string(r)).Ceil() <= width {
-			return append(lines, string(r))
+		r := shareCardClusters(strings.TrimSpace(s), f)
+		if shareCardTextWidth(strings.Join(r, ""), f).Ceil() <= width {
+			return append(lines, strings.Join(r, ""))
 		}
 		last := len(lines) == maxLines-1
 		suffix := ""
@@ -204,19 +236,19 @@ func shareCardLines(s string, f font.Face, width, maxLines int) []string {
 			suffix = "…"
 		}
 		cut := len(r)
-		for cut > 0 && font.MeasureString(f, string(r[:cut])+suffix).Ceil() > width {
+		for cut > 0 && shareCardTextWidth(strings.Join(r[:cut], "")+suffix, f).Ceil() > width {
 			cut--
 		}
 		if !last {
 			for i := cut; i > cut/2; i-- {
-				if r[i-1] == ' ' {
+				if r[i-1] == " " {
 					cut = i - 1
 					break
 				}
 			}
 		}
-		lines = append(lines, string(r[:cut])+suffix)
-		s = string(r[cut:])
+		lines = append(lines, strings.Join(r[:cut], "")+suffix)
+		s = strings.Join(r[cut:], "")
 	}
 	return lines
 }

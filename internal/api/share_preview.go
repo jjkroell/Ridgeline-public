@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/jjkroell/ridgeline/internal/store"
 	xhtml "golang.org/x/net/html"
@@ -102,24 +103,46 @@ func shareRole(role string) string {
 	}
 }
 func cleanShareText(s string, limit int) string {
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
-			return ' '
+	var out strings.Builder
+	for s != "" {
+		cluster, emoji := nextShareCluster(s)
+		s = s[len(cluster):]
+		if emoji != nil {
+			// Preserve joiners and tag characters only inside recognized emoji.
+			out.WriteString(cluster)
+		} else {
+			r, _ := utf8.DecodeRuneInString(cluster)
+			if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+				r = ' '
+			}
+			out.WriteRune(r)
 		}
-		return r
-	}, s)
-	r := []rune(strings.Join(strings.Fields(s), " "))
-	if len(r) > limit {
-		return string(r[:limit-1]) + "…"
 	}
-	return string(r)
+	clean := strings.Join(strings.Fields(out.String()), " ")
+	if utf8.RuneCountInString(clean) <= limit {
+		return clean
+	}
+	out.Reset()
+	count := 0
+	for clean != "" {
+		cluster, _ := nextShareCluster(clean)
+		n := utf8.RuneCountInString(cluster)
+		if count+n >= limit {
+			break
+		}
+		out.WriteString(cluster)
+		count += n
+		clean = clean[len(cluster):]
+	}
+	return strings.TrimSpace(out.String()) + "…"
 }
+
 func (p *sharePreview) revision(site shareSite) string {
 	b, _ := json.Marshal(struct {
 		Version int
 		Site    shareSite
 		Preview *sharePreview
-	}{3, site, p})
+	}{4, site, p})
 	h := sha256.Sum256(b)
 	return fmt.Sprintf("%x", h[:12])
 }
