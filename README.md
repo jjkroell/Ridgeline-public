@@ -1,3 +1,18 @@
+> ## ⚠ This repository has moved
+>
+> Ridgeline is now developed in a single public repository:
+> **https://github.com/jjkroell/ridgeline**
+>
+> This repo was a region-scrubbed fork maintained alongside a private tree.
+> Keeping the two in step cost more than it returned, so the main repository is
+> now public and this one is archived, read-only, and no longer updated.
+>
+> Issues and pull requests here remain readable for reference — including
+> [#1](https://github.com/jjkroell/Ridgeline-public/issues/1) and
+> [#4](https://github.com/jjkroell/Ridgeline-public/pull/4), both by
+> [@benaltair](https://github.com/benaltair), whose work is in the new
+> repository. Please open anything new over there.
+
 # Ridgeline
 
 **A live observatory for [MeshCore](https://meshcore.co.uk) LoRa mesh networks.**
